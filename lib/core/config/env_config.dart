@@ -11,13 +11,14 @@ class EnvConfig {
     required this.apiBaseUrl,
   });
 
-  /// Factory para resolver el entorno mediante la constante de compilación `--dart-define=APP_ENV=prod` o `dev`
+  /// Factory para resolver el entorno mediante la constante de compilación `--dart-define=APP_ENV=dev` o `prod`.
+  /// Por defecto apunta obligatoriamente a PRODUCCIÓN (https://katering-grecia-app.onrender.com/api/v1).
   factory EnvConfig.fromEnvironment() {
-    const envString = String.fromEnvironment('APP_ENV', defaultValue: 'dev');
-    if (envString.toLowerCase() == 'prod') {
-      return EnvConfig.prod();
+    const envString = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
+    if (envString.toLowerCase() == 'dev') {
+      return EnvConfig.dev();
     }
-    return EnvConfig.dev();
+    return EnvConfig.prod();
   }
 
   /// Configuración para Entorno de Desarrollo (DEV)
@@ -32,7 +33,7 @@ class EnvConfig {
     );
   }
 
-  /// Configuración para Entorno de Producción (PROD)
+  /// Configuración para Entorno de Producción (PROD) - Servidor Render
   factory EnvConfig.prod() {
     return const EnvConfig._(
       environment: AppEnvironment.prod,

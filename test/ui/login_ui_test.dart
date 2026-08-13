@@ -6,9 +6,10 @@ import 'package:katering_grecia_app/features/auth/presentation/login_screen.dart
 void main() {
   testWidgets('LoginScreen renders empty fields by default and toggles password visibility', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
+      ProviderScope(
         child: MaterialApp(
-          home: LoginScreen(),
+          theme: ThemeData(),
+          home: const LoginScreen(),
         ),
       ),
     );
@@ -32,9 +33,10 @@ void main() {
 
   testWidgets('LoginScreen preserves typed text without reverting to default values', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
+      ProviderScope(
         child: MaterialApp(
-          home: LoginScreen(),
+          theme: ThemeData(),
+          home: const LoginScreen(),
         ),
       ),
     );
