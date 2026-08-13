@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../common/presentation/widgets/confirm_dialog.dart';
+import '../../common/presentation/widgets/empty_state_widget.dart';
 import '../../financial_metrics/presentation/widgets/financial_summary_card.dart';
 import '../application/expenses_notifier.dart';
 import 'expense_detail_dialog.dart';
@@ -38,6 +41,11 @@ class ExpensesScreen extends ConsumerWidget {
                   paymentMethod: paymentMethod,
                   expenseDate: expenseDate,
                 );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Gasto registrado offline exitosamente')),
+                  );
+                }
               },
             ),
           );
@@ -105,13 +113,11 @@ class ExpensesScreen extends ConsumerWidget {
                 if (expenses.isEmpty) {
                   return const Card(
                     child: Padding(
-                      padding: EdgeInsets.all(24.0),
-                      child: Center(
-                        child: Text(
-                          'No hay gastos registrados para los filtros seleccionados.\n¡Toca + NUEVO GASTO para agregar uno offline!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
-                        ),
+                      padding: EdgeInsets.all(16.0),
+                      child: EmptyStateWidget(
+                        icon: Icons.money_off,
+                        title: 'No hay gastos registrados',
+                        subtitle: '¡Toca el botón + NUEVO GASTO para registrar egresos offline!',
                       ),
                     ),
                   );
@@ -140,28 +146,30 @@ class ExpensesScreen extends ConsumerWidget {
                                 paymentMethod: paymentMethod,
                                 expenseDate: expenseDate,
                               );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Gasto actualizado')),
+                                );
+                              }
                             },
                           ),
                         );
                       },
                       onDelete: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Eliminar Gasto'),
-                            content: Text('¿Desea eliminar el gasto "${expense.description}" por Bs ${expense.amount}?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('ELIMINAR'),
-                              ),
-                            ],
-                          ),
+                        final confirm = await ConfirmDialog.show(
+                          context,
+                          title: 'Eliminar Gasto',
+                          content: '¿Desea eliminar el gasto "${expense.description}" por ${CurrencyFormatter.formatBOB(expense.amount)}?',
+                          confirmLabel: 'SÍ, ELIMINAR',
+                          confirmColor: Colors.red,
                         );
-                        if (confirm ?? false) {
+                        if (confirm) {
                           await repository.deleteExpense(expense.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Gasto eliminado')),
+                            );
+                          }
                         }
                       },
                     );

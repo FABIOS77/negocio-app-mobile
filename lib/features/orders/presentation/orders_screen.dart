@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../common/presentation/widgets/empty_state_widget.dart';
 import '../../production/presentation/production_summary_widget.dart';
 import '../application/orders_notifier.dart';
 import 'new_order_screen.dart';
@@ -69,13 +70,11 @@ class OrdersScreen extends ConsumerWidget {
                 if (orders.isEmpty) {
                   return const Card(
                     child: Padding(
-                      padding: EdgeInsets.all(24.0),
-                      child: Center(
-                        child: Text(
-                          'No hay pedidos registrados para el día de hoy.\n¡Toca + NUEVO PEDIDO para registrar uno en cocina!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
-                        ),
+                      padding: EdgeInsets.all(16.0),
+                      child: EmptyStateWidget(
+                        icon: Icons.receipt_long,
+                        title: 'Aún no hay pedidos registrados para hoy',
+                        subtitle: '¡Toca el botón + NUEVO PEDIDO para registrar uno en cocina offline!',
                       ),
                     ),
                   );

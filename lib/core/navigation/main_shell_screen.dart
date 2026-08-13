@@ -15,7 +15,7 @@ class MainShellScreen extends ConsumerWidget {
     if (location.startsWith('/daily-menu')) return 2;
     if (location.startsWith('/expenses')) return 3;
     if (location.startsWith('/reports')) return 4;
-    if (location.startsWith('/sync-status')) return 5;
+    if (location.startsWith('/sync')) return 5;
     return 0;
   }
 
@@ -37,7 +37,7 @@ class MainShellScreen extends ConsumerWidget {
         context.go('/reports');
         break;
       case 5:
-        context.go('/sync-status');
+        context.go('/sync-diagnostics');
         break;
     }
   }

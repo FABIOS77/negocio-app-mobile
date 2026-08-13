@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../common/presentation/widgets/confirm_dialog.dart';
 import '../application/orders_notifier.dart';
 import '../domain/order_model.dart';
 
@@ -87,25 +88,56 @@ class OrderDetailDialog extends ConsumerWidget {
       actions: [
         if (!isTerminal) ...[
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(110, 48), // Área táctil de 48dp
+            ),
             icon: const Icon(Icons.check),
             label: const Text('ENTREGAR'),
             onPressed: () async {
               await repository.changeOrderStatus(order.id, 'DELIVERED');
-              if (context.mounted) Navigator.pop(context);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Pedido marcado como ENTREGADO')),
+                );
+                Navigator.pop(context);
+              }
             },
           ),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(110, 48), // Área táctil de 48dp
+            ),
             icon: const Icon(Icons.cancel),
             label: const Text('CANCELAR'),
             onPressed: () async {
-              await repository.changeOrderStatus(order.id, 'CANCELLED');
-              if (context.mounted) Navigator.pop(context);
+              final confirmed = await ConfirmDialog.show(
+                context,
+                title: 'Cancelar Pedido',
+                content: '¿Está seguro de cancelar el pedido de ${order.customerName} por ${CurrencyFormatter.formatBOB(order.total)}?',
+                confirmLabel: 'SÍ, CANCELAR',
+                confirmColor: Colors.red,
+              );
+              if (confirmed) {
+                await repository.changeOrderStatus(order.id, 'CANCELLED');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Pedido CANCELADO')),
+                  );
+                  Navigator.pop(context);
+                }
+              }
             },
           ),
         ],
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar')),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(80, 48)),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
       ],
     );
   }

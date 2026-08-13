@@ -8,6 +8,7 @@ import '../../features/orders/presentation/orders_screen.dart';
 import '../../features/daily_menu/presentation/daily_menu_screen.dart';
 import '../../features/expenses/presentation/expenses_screen.dart';
 import '../../features/reports/presentation/reports_screen.dart';
+import '../../features/sync/presentation/sync_diagnostics_screen.dart';
 import '../../features/sync/presentation/sync_status_screen.dart';
 import 'main_shell_screen.dart';
 
@@ -64,6 +65,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sync-status',
             builder: (context, state) => const SyncStatusScreen(),
+          ),
+          GoRoute(
+            path: '/sync-diagnostics',
+            builder: (context, state) => const SyncDiagnosticsScreen(),
           ),
         ],
       ),
