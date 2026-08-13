@@ -1,191 +1,178 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
-import '../../../core/database/app_database.dart';
-import '../../../core/sync/sync_engine.dart';
-import '../../../core/utils/timezone_utils.dart';
-
-final expensesStreamProvider = StreamProvider<List<ExpensesTableData>>((ref) {
-  final db = ref.watch(databaseProvider);
-  return (db.select(db.expensesTable)
-        ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
-      .watch();
-});
+import '../../financial_metrics/presentation/widgets/financial_summary_card.dart';
+import '../application/expenses_notifier.dart';
+import 'expense_detail_dialog.dart';
+import 'widgets/expense_tile.dart';
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
 
-  void _showNewExpenseDialog(BuildContext context, WidgetRef ref) {
-    final descController = TextEditingController();
-    final amountController = TextEditingController();
-    String paymentMethod = 'CASH';
-    final uuid = const Uuid();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                top: 20,
-                left: 20,
-                right: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Registrar Gasto Offline', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: descController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripción del Gasto',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.description),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Monto en BOB (Bs)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'CASH', label: Text('Efectivo')),
-                      ButtonSegment(value: 'QR', label: Text('QR')),
-                      ButtonSegment(value: 'OTHER', label: Text('Otro')),
-                    ],
-                    selected: {paymentMethod},
-                    onSelectionChanged: (val) {
-                      setState(() {
-                        paymentMethod = val.first;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber.shade900,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.check),
-                      label: const Text('GUARDAR GASTO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      onPressed: () async {
-                        final desc = descController.text.trim();
-                        final amount = double.tryParse(amountController.text) ?? 0.0;
-                        if (desc.isEmpty || amount <= 0) return;
-
-                        final expenseId = uuid.v4();
-                        final db = ref.read(databaseProvider);
-                        final queue = ref.read(syncQueueManagerProvider);
-                        final now = DateTime.now().toUtc();
-                        final expenseDate = TimezoneUtils.getTodayBusinessDate();
-
-                        // 1. Guardar localmente en SQLite
-                        await db.into(db.expensesTable).insert(
-                              ExpensesTableCompanion.insert(
-                                id: expenseId,
-                                description: desc,
-                                amount: amount,
-                                categoryId: '00000000-0000-0000-0000-000000000000',
-                                paymentMethod: paymentMethod,
-                                expenseDate: expenseDate,
-                                createdBy: 'local-user',
-                                syncStatus: const Value('PENDING'),
-                                createdAt: now,
-                                updatedAt: now,
-                              ),
-                            );
-
-                        // 2. Encolar mutación offline PUSH
-                        await queue.enqueueOperation(
-                          entityType: 'expense',
-                          entityId: expenseId,
-                          operation: 'CREATE',
-                          payload: {
-                            'id': expenseId,
-                            'description': desc,
-                            'amount': amount,
-                            'category_id': '00000000-0000-0000-0000-000000000000',
-                            'payment_method': paymentMethod,
-                            'expense_date': expenseDate,
-                          },
-                        );
-
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        ref.read(syncEngineProvider).syncAll();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final expensesAsync = ref.watch(expensesStreamProvider);
+    final categoriesAsync = ref.watch(expenseCategoriesStreamProvider);
+    final selectedCategory = ref.watch(expensesFilterCategoryProvider);
+    final selectedPayment = ref.watch(expensesFilterPaymentProvider);
+    final repository = ref.read(expensesRepositoryProvider);
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.amber.shade900,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('REGISTRAR GASTO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: () => _showNewExpenseDialog(context, ref),
+      appBar: AppBar(
+        title: const Text('Control de Gastos', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      body: expensesAsync.when(
-        data: (expenses) {
-          if (expenses.isEmpty) {
-            return const Center(
-              child: Text(
-                'No hay gastos registrados localmente.\n¡Toca + REGISTRAR GASTO para guardar uno offline!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: expenses.length,
-            itemBuilder: (context, index) {
-              final exp = expenses[index];
-              return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Colors.amber,
-                    child: Icon(Icons.money_off, color: Colors.white),
-                  ),
-                  title: Text(exp.description, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Fecha: ${exp.expenseDate} • Pago: ${exp.paymentMethod}\nSync: ${exp.syncStatus}'),
-                  trailing: Text('Bs ${exp.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                ),
-              );
-            },
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.red,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('NUEVO GASTO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        onPressed: () {
+          final categories = categoriesAsync.asData?.value ?? [];
+          showDialog(
+            context: context,
+            builder: (ctx) => ExpenseDetailDialog(
+              categories: categories,
+              onSave: (description, amount, categoryId, paymentMethod, expenseDate) async {
+                await repository.createExpense(
+                  description: description,
+                  amount: amount,
+                  categoryId: categoryId,
+                  paymentMethod: paymentMethod,
+                  expenseDate: expenseDate,
+                );
+              },
+            ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error: $err')),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const FinancialSummaryCard(),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Filtros de Gastos:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String?>(
+                            initialValue: selectedCategory,
+                            decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('Todas')),
+                              ...(categoriesAsync.asData?.value ?? []).map(
+                                (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              ref.read(expensesFilterCategoryProvider.notifier).state = val;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String?>(
+                            initialValue: selectedPayment,
+                            decoration: const InputDecoration(labelText: 'Pago', border: OutlineInputBorder()),
+                            items: const [
+                              DropdownMenuItem(value: null, child: Text('Todos')),
+                              DropdownMenuItem(value: 'CASH', child: Text('Efectivo')),
+                              DropdownMenuItem(value: 'QR', child: Text('QR')),
+                              DropdownMenuItem(value: 'OTHER', child: Text('Otro')),
+                            ],
+                            onChanged: (val) {
+                              ref.read(expensesFilterPaymentProvider.notifier).state = val;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Historial de Gastos:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            expensesAsync.when(
+              data: (expenses) {
+                if (expenses.isEmpty) {
+                  return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: Center(
+                        child: Text(
+                          'No hay gastos registrados para los filtros seleccionados.\n¡Toca + NUEVO GASTO para agregar uno offline!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: expenses.length,
+                  itemBuilder: (context, index) {
+                    final expense = expenses[index];
+                    return ExpenseTile(
+                      expense: expense,
+                      onTap: () {
+                        final categories = categoriesAsync.asData?.value ?? [];
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => ExpenseDetailDialog(
+                            expense: expense,
+                            categories: categories,
+                            onSave: (description, amount, categoryId, paymentMethod, expenseDate) async {
+                              await repository.updateExpense(
+                                id: expense.id,
+                                description: description,
+                                amount: amount,
+                                categoryId: categoryId,
+                                paymentMethod: paymentMethod,
+                                expenseDate: expenseDate,
+                              );
+                            },
+                          ),
+                        );
+                      },
+                      onDelete: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Eliminar Gasto'),
+                            content: Text('¿Desea eliminar el gasto "${expense.description}" por Bs ${expense.amount}?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('ELIMINAR'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm ?? false) {
+                          await repository.deleteExpense(expense.id);
+                        }
+                      },
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(child: Text('Error: $err')),
+            ),
+          ],
+        ),
       ),
     );
   }
