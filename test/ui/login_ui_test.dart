@@ -13,6 +13,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     // 1. Campos inician vacíos
     final emailWidget = tester.widget<TextFormField>(find.byKey(const Key('emailField')));
@@ -40,6 +41,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('emailField')), 'cocina@katering.com');
     await tester.enterText(find.byKey(const Key('passwordField')), 'CocinaPass123!');
