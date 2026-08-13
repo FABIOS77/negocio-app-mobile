@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../financial_metrics/domain/financial_metrics_model.dart';
 import '../../orders/presentation/new_order_screen.dart';
+import '../../reports/presentation/widgets/export_excel_button_widget.dart';
 
 import '../application/dashboard_notifier.dart';
 import 'widgets/executive_summary_cards_widget.dart';
@@ -90,6 +91,8 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
+              const Center(child: ExportExcelButtonWidget()),
               const SizedBox(height: 20),
               QuickActionsWidget(
                 onNewOrder: () {
