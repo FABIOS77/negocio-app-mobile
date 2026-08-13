@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/application/auth_notifier.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
+import '../../features/dishes/presentation/dishes_screen.dart';
 import '../../features/orders/presentation/orders_screen.dart';
 import '../../features/daily_menu/presentation/daily_menu_screen.dart';
 import '../../features/expenses/presentation/expenses_screen.dart';
@@ -45,6 +46,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/dashboard',
             builder: (context, state) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: '/dishes',
+            builder: (context, state) => const DishesScreen(),
           ),
           GoRoute(
             path: '/orders',

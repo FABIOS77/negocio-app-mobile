@@ -104,6 +104,9 @@ class DashboardScreen extends ConsumerWidget {
                 onDailyMenu: () {
                   context.go('/daily-menu');
                 },
+                onDishes: () {
+                  context.go('/dishes');
+                },
                 onNewExpense: () {
                   context.go('/expenses');
                 },

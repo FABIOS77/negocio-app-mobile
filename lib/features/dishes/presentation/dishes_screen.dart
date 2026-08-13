@@ -14,29 +14,33 @@ class DishesScreen extends ConsumerWidget {
     final activeOnly = ref.watch(activeDishesOnlyProvider);
     final repository = ref.read(dishesRepositoryProvider);
 
+    void openCreateDialog() {
+      showDialog(
+        context: context,
+        builder: (ctx) => DishDetailDialog(
+          onSave: (name, description, price, imageUrl) async {
+            await repository.createDish(
+              name: name,
+              description: description,
+              price: price,
+              imageUrl: imageUrl,
+            );
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Catálogo de Platos', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton.extended(
+        key: const Key('addDishFab'),
         backgroundColor: Colors.deepOrange,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('NUEVO PLATO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => DishDetailDialog(
-              onSave: (name, description, price, imageUrl) async {
-                await repository.createDish(
-                  name: name,
-                  description: description,
-                  price: price,
-                  imageUrl: imageUrl,
-                );
-              },
-            ),
-          );
-        },
+        onPressed: openCreateDialog,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -56,11 +60,29 @@ class DishesScreen extends ConsumerWidget {
               child: dishesAsync.when(
                 data: (dishes) {
                   if (dishes.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No hay platos registrados.\n¡Toca + NUEVO PLATO para agregar uno offline!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.restaurant, size: 64, color: Colors.grey),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'No hay platos registrados.\n¡Toca + NUEVO PLATO para agregar uno offline!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepOrange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            ),
+                            icon: const Icon(Icons.add),
+                            label: const Text('CREAR PRIMER PLATO', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: openCreateDialog,
+                          ),
+                        ],
                       ),
                     );
                   }

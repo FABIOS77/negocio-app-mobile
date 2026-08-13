@@ -5,6 +5,7 @@ class QuickActionsWidget extends StatelessWidget {
   final VoidCallback onDailyMenu;
   final VoidCallback onNewExpense;
   final VoidCallback onProduction;
+  final VoidCallback onDishes;
 
   const QuickActionsWidget({
     super.key,
@@ -12,6 +13,7 @@ class QuickActionsWidget extends StatelessWidget {
     required this.onDailyMenu,
     required this.onNewExpense,
     required this.onProduction,
+    required this.onDishes,
   });
 
   @override
@@ -47,13 +49,26 @@ class QuickActionsWidget extends StatelessWidget {
           children: [
             Expanded(
               child: _buildActionButton(
+                label: 'Catálogo Platos',
+                icon: Icons.fastfood,
+                color: Colors.teal,
+                onTap: onDishes,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildActionButton(
                 label: 'Registrar Gasto',
                 icon: Icons.money_off,
                 color: Colors.red,
                 onTap: onNewExpense,
               ),
             ),
-            const SizedBox(width: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
             Expanded(
               child: _buildActionButton(
                 label: 'Ver Producción',
