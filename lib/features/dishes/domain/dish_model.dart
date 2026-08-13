@@ -26,12 +26,17 @@ class DishModel {
   });
 
   factory DishModel.fromJson(Map<String, dynamic> json) {
+    final rawImageUrl = (json['imageUrl'] ?? json['image_url']) as String?;
+    final cleanImageUrl = (rawImageUrl != null && rawImageUrl.trim().isNotEmpty) ? rawImageUrl.trim() : null;
+    final rawDescription = json['description'] as String?;
+    final cleanDescription = (rawDescription != null && rawDescription.trim().isNotEmpty) ? rawDescription.trim() : null;
+
     return DishModel(
       id: json['id'] as String,
       name: json['name'] as String,
-      description: json['description'] as String?,
+      description: cleanDescription,
       price: (json['price'] as num).toDouble(),
-      imageUrl: (json['imageUrl'] ?? json['image_url']) as String?,
+      imageUrl: cleanImageUrl,
       active: json['active'] as bool? ?? true,
       version: (json['version'] as num?)?.toInt() ?? 1,
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
@@ -44,12 +49,16 @@ class DishModel {
   }
 
   Map<String, dynamic> toJson() {
+    final cleanImageUrl = (imageUrl != null && imageUrl!.trim().isNotEmpty) ? imageUrl!.trim() : null;
+    final cleanDescription = (description != null && description!.trim().isNotEmpty) ? description!.trim() : null;
+
     return {
       'id': id,
-      'name': name,
-      if (description != null) 'description': description,
+      'name': name.trim(),
+      'description': cleanDescription,
       'price': price,
-      if (imageUrl != null) 'image_url': imageUrl,
+      'imageUrl': cleanImageUrl,
+      'image_url': cleanImageUrl,
       'active': active,
       'version': version,
       'created_at': createdAt.toIso8601String(),

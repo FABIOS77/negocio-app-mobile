@@ -89,15 +89,18 @@ class DishesRepository {
   }) async {
     final id = _uuid.v4();
     final now = DateTime.now().toUtc();
+    final cleanName = name.trim();
+    final cleanDesc = (description != null && description.trim().isNotEmpty) ? description.trim() : null;
+    final cleanImageUrl = (imageUrl != null && imageUrl.trim().isNotEmpty) ? imageUrl.trim() : null;
 
     // 1. Guardar en SQLite
     await _db.into(_db.dishesTable).insert(
           DishesTableCompanion.insert(
             id: id,
-            name: name,
-            description: Value(description),
+            name: cleanName,
+            description: Value(cleanDesc),
             price: price,
-            imageUrl: Value(imageUrl),
+            imageUrl: Value(cleanImageUrl),
             active: const Value(true),
             version: const Value(1),
             syncStatus: const Value('PENDING'),
@@ -108,10 +111,10 @@ class DishesRepository {
 
     final dish = DishModel(
       id: id,
-      name: name,
-      description: description,
+      name: cleanName,
+      description: cleanDesc,
       price: price,
-      imageUrl: imageUrl,
+      imageUrl: cleanImageUrl,
       active: true,
       version: 1,
       syncStatus: 'PENDING',
@@ -148,12 +151,20 @@ class DishesRepository {
     final now = DateTime.now().toUtc();
     final updatedVersion = current.version + 1;
 
+    final cleanName = name != null ? name.trim() : current.name;
+    final cleanDesc = description != null
+        ? (description.trim().isNotEmpty ? description.trim() : null)
+        : current.description;
+    final cleanImageUrl = imageUrl != null
+        ? (imageUrl.trim().isNotEmpty ? imageUrl.trim() : null)
+        : current.imageUrl;
+
     final updatedDish = DishModel(
       id: id,
-      name: name ?? current.name,
-      description: description ?? current.description,
+      name: cleanName,
+      description: cleanDesc,
       price: price ?? current.price,
-      imageUrl: imageUrl ?? current.imageUrl,
+      imageUrl: cleanImageUrl,
       active: active ?? current.active,
       version: updatedVersion,
       syncStatus: 'PENDING',
