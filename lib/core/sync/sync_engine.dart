@@ -382,9 +382,21 @@ class SyncEngine {
 
     switch (entityType) {
       case 'dish':
-        if (operation == 'DELETE' || snapshot['active'] == false) {
+        final isDeleted = operation == 'DELETE' ||
+            snapshot['deleted'] == true ||
+            snapshot['deleted_at'] != null ||
+            snapshot['deletedAt'] != null ||
+            snapshot['active'] == false;
+
+        if (isDeleted) {
+          final deletedAt = DateTime.tryParse(snapshot['deletedAt'] ?? snapshot['deleted_at'] ?? '') ?? now;
           await (_db.update(_db.dishesTable)..where((t) => t.id.equals(entityId))).write(
-            DishesTableCompanion(active: const Value(false), deletedAt: Value(now), version: Value(version), syncStatus: const Value('SYNCED')),
+            DishesTableCompanion(
+              active: const Value(false),
+              deletedAt: Value(deletedAt),
+              version: Value(version),
+              syncStatus: const Value('SYNCED'),
+            ),
           );
         } else {
           await _db.into(_db.dishesTable).insertOnConflictUpdate(
@@ -394,7 +406,7 @@ class SyncEngine {
                   description: Value(snapshot['description']),
                   price: ParseUtils.toDouble(snapshot['price']),
                   imageUrl: Value(snapshot['imageUrl'] ?? snapshot['image_url']),
-                  active: Value(snapshot['active'] ?? true),
+                  active: const Value(true),
                   version: Value(version),
                   syncStatus: const Value('SYNCED'),
                   createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
@@ -405,7 +417,13 @@ class SyncEngine {
         break;
 
       case 'expense_category':
-        if (operation == 'DELETE') {
+        final isDeleted = operation == 'DELETE' ||
+            snapshot['deleted'] == true ||
+            snapshot['deleted_at'] != null ||
+            snapshot['deletedAt'] != null ||
+            snapshot['active'] == false;
+
+        if (isDeleted) {
           await (_db.update(_db.expenseCategoriesTable)..where((t) => t.id.equals(entityId))).write(
             ExpenseCategoriesTableCompanion(active: const Value(false), version: Value(version), syncStatus: const Value('SYNCED')),
           );
@@ -414,7 +432,7 @@ class SyncEngine {
                 ExpenseCategoriesTableCompanion.insert(
                   id: entityId,
                   name: snapshot['name'] ?? '',
-                  active: Value(snapshot['active'] ?? true),
+                  active: const Value(true),
                   version: Value(version),
                   syncStatus: const Value('SYNCED'),
                   createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
@@ -425,9 +443,15 @@ class SyncEngine {
         break;
 
       case 'expense':
-        if (operation == 'DELETE' || snapshot['deletedAt'] != null || snapshot['deleted_at'] != null) {
+        final isDeleted = operation == 'DELETE' ||
+            snapshot['deleted'] == true ||
+            snapshot['deleted_at'] != null ||
+            snapshot['deletedAt'] != null;
+
+        if (isDeleted) {
+          final deletedAt = DateTime.tryParse(snapshot['deletedAt'] ?? snapshot['deleted_at'] ?? '') ?? now;
           await (_db.update(_db.expensesTable)..where((t) => t.id.equals(entityId))).write(
-            ExpensesTableCompanion(deletedAt: Value(now), version: Value(version), syncStatus: const Value('SYNCED')),
+            ExpensesTableCompanion(deletedAt: Value(deletedAt), version: Value(version), syncStatus: const Value('SYNCED')),
           );
         } else {
           await _db.into(_db.expensesTable).insertOnConflictUpdate(
@@ -449,7 +473,15 @@ class SyncEngine {
         break;
 
       case 'order':
+        final isDeleted = operation == 'DELETE' ||
+            snapshot['deleted'] == true ||
+            snapshot['deleted_at'] != null ||
+            snapshot['deletedAt'] != null ||
+            snapshot['status'] == 'CANCELLED';
+
         final orderNumber = snapshot['orderNumber'] ?? snapshot['order_number'];
+        final status = isDeleted ? 'CANCELLED' : (snapshot['status'] ?? 'PENDING');
+
         await _db.into(_db.ordersTable).insertOnConflictUpdate(
               OrdersTableCompanion.insert(
                 id: entityId,
@@ -458,7 +490,7 @@ class SyncEngine {
                 locationText: Value(snapshot['locationText'] ?? snapshot['location_text']),
                 total: ParseUtils.toDouble(snapshot['total']),
                 paymentMethod: snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? 'CASH',
-                status: snapshot['status'] ?? 'PENDING',
+                status: status,
                 orderedAt: DateTime.tryParse(snapshot['orderedAt'] ?? snapshot['ordered_at'] ?? '') ?? now,
                 createdBy: snapshot['createdBy'] ?? snapshot['created_by'] ?? '',
                 version: Value(version),
@@ -493,12 +525,18 @@ class SyncEngine {
         break;
 
       case 'daily_menu':
+        final isDeleted = operation == 'DELETE' ||
+            snapshot['deleted'] == true ||
+            snapshot['deleted_at'] != null ||
+            snapshot['deletedAt'] != null ||
+            snapshot['active'] == false;
+
         final menuDate = snapshot['menuDate'] ?? snapshot['menu_date'] ?? '';
         await _db.into(_db.dailyMenusTable).insertOnConflictUpdate(
               DailyMenusTableCompanion.insert(
                 id: entityId,
                 menuDate: menuDate,
-                active: Value(snapshot['active'] ?? true),
+                active: Value(!isDeleted),
                 version: Value(version),
                 syncStatus: const Value('SYNCED'),
                 createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,

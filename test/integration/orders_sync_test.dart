@@ -141,5 +141,66 @@ void main() {
       expect(fetchedOrder.items.length, equals(1));
       expect(fetchedOrder.items.first.subtotal, equals(45.0));
     });
+
+    test('Pull soft-deleted order with deleted flag or DELETE operation sets status CANCELLED without enqueuing push', () async {
+      // 1. Crear un pedido local previo
+      final dish = await dishesRepo.createDish(name: 'Sopa de Res', price: 20.0);
+      final localOrder = await ordersRepo.createOrder(
+        customerName: 'Cliente para Cancelar Remoto',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish.id, quantity: 1)],
+      );
+
+      // Limpiar cola de sincronización para verificar que el PULL no la contamine
+      await db.delete(db.syncQueueTable).go();
+
+      // 2. Simular respuesta PULL que contiene snapshot con deleted: true y operation: DELETE
+      when(() => mockDio.get('/sync/pull', queryParameters: any(named: 'queryParameters'))).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: '/sync/pull'),
+          statusCode: 200,
+          data: {
+            'success': true,
+            'data': {
+              'changes': [
+                {
+                  'server_change_id': 500,
+                  'entity_type': 'order',
+                  'entity_id': localOrder.id,
+                  'operation': 'DELETE',
+                  'data': {
+                    'order_number': '20260813-0010',
+                    'customer_name': 'Cliente para Cancelar Remoto',
+                    'total': 20.0,
+                    'payment_method': 'CASH',
+                    'status': 'PENDING',
+                    'deleted': true,
+                    'deleted_at': '2026-08-13T14:30:00.000Z',
+                    'ordered_at': '2026-08-13T12:00:00.000Z',
+                    'created_by': 'remote-user',
+                  },
+                  'version': 2,
+                }
+              ],
+              'next_cursor': 500,
+              'has_more': false,
+            }
+          },
+        ),
+      );
+
+      final count = await syncEngine.pull();
+      expect(count, equals(1));
+
+      // 3. Verificar que localmente ahora está CANCELLED
+      final orderAfterPull = await ordersRepo.getOrderById(localOrder.id);
+      expect(orderAfterPull, isNotNull);
+      expect(orderAfterPull!.status, equals('CANCELLED'));
+      expect(orderAfterPull.version, equals(2));
+
+      // 4. Verificar que NO se encoló ninguna operación de PUSH
+      final pendingOps = await queueManager.getPendingOperations();
+      expect(pendingOps.isEmpty, isTrue);
+    });
   });
 }

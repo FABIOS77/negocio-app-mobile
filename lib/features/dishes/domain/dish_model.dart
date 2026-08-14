@@ -33,18 +33,25 @@ class DishModel {
     final rawDescription = json['description'] as String?;
     final cleanDescription = (rawDescription != null && rawDescription.trim().isNotEmpty) ? rawDescription.trim() : null;
 
+    final isDeleted = json['deleted'] == true ||
+        json['deleted_at'] != null ||
+        json['deletedAt'] != null ||
+        json['active'] == false;
+
+    final deletedAt = json['deletedAt'] != null
+        ? DateTime.tryParse(json['deletedAt'] as String)
+        : (json['deleted_at'] != null ? DateTime.tryParse(json['deleted_at'] as String) : (isDeleted ? DateTime.now().toUtc() : null));
+
     return DishModel(
       id: json['id'] as String,
       name: json['name'] as String,
       description: cleanDescription,
       price: ParseUtils.toDouble(json['price']),
       imageUrl: cleanImageUrl,
-      active: json['active'] as bool? ?? true,
+      active: !isDeleted,
       version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
-      deletedAt: json['deletedAt'] != null
-          ? DateTime.tryParse(json['deletedAt'] as String)
-          : (json['deleted_at'] != null ? DateTime.tryParse(json['deleted_at'] as String) : null),
+      deletedAt: deletedAt,
       createdAt: DateTime.tryParse(json['createdAt'] ?? json['created_at'] ?? '') ?? DateTime.now().toUtc(),
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? json['updated_at'] ?? '') ?? DateTime.now().toUtc(),
     );

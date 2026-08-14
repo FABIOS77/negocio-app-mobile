@@ -38,6 +38,13 @@ class OrderModel {
     final rawItems = (json['items'] as List? ?? []);
     final itemsList = rawItems.map((i) => OrderItemModel.fromJson(i as Map<String, dynamic>)).toList();
 
+    final isDeleted = json['deleted'] == true ||
+        json['deleted_at'] != null ||
+        json['deletedAt'] != null ||
+        json['status'] == 'CANCELLED';
+
+    final status = isDeleted ? 'CANCELLED' : (json['status'] as String? ?? 'PENDING');
+
     return OrderModel(
       id: json['id'] as String,
       orderNumber: (json['orderNumber'] ?? json['order_number'])?.toString(),
@@ -45,7 +52,7 @@ class OrderModel {
       locationText: (json['locationText'] ?? json['location_text']) as String?,
       total: ParseUtils.toDouble(json['total']),
       paymentMethod: (json['paymentMethod'] ?? json['payment_method']) as String? ?? 'CASH',
-      status: json['status'] as String? ?? 'PENDING',
+      status: status,
       orderedAt: DateTime.tryParse(json['orderedAt'] ?? json['ordered_at'] ?? '') ?? DateTime.now().toUtc(),
       createdBy: (json['createdBy'] ?? json['created_by']) as String? ?? 'local-user',
       version: ParseUtils.toInt(json['version'], 1),

@@ -37,10 +37,15 @@ class DailyMenuModel {
       );
     }).toList();
 
+    final isDeleted = json['deleted'] == true ||
+        json['deleted_at'] != null ||
+        json['deletedAt'] != null ||
+        json['active'] == false;
+
     return DailyMenuModel(
       id: json['id'] as String,
       menuDate: (json['menuDate'] ?? json['menu_date']) as String,
-      active: json['active'] as bool? ?? true,
+      active: !isDeleted,
       version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
       dishes: dishesList,

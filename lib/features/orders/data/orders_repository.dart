@@ -381,6 +381,19 @@ class OrdersRepository {
     _syncEngine.syncAll();
   }
 
+  /// Marcar orden localmente como CANCELLED sin encolar operación de PUSH (usado durante PULL)
+  Future<void> deleteOrderLocalOnly(String id, {int? version}) async {
+    final now = DateTime.now().toUtc();
+    await (_db.update(_db.ordersTable)..where((t) => t.id.equals(id))).write(
+      OrdersTableCompanion(
+        status: const Value('CANCELLED'),
+        version: version != null ? Value(version) : const Value.absent(),
+        syncStatus: const Value('SYNCED'),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
   Future<void> changeOrderStatus(String id, String newStatus) async {
     final current = await getOrderById(id);
     if (current == null) return;

@@ -32,6 +32,14 @@ class ExpenseModel {
   });
 
   factory ExpenseModel.fromJson(Map<String, dynamic> json) {
+    final isDeleted = json['deleted'] == true ||
+        json['deleted_at'] != null ||
+        json['deletedAt'] != null;
+
+    final deletedAt = json['deletedAt'] != null
+        ? DateTime.tryParse(json['deletedAt'] as String)
+        : (json['deleted_at'] != null ? DateTime.tryParse(json['deleted_at'] as String) : (isDeleted ? DateTime.now().toUtc() : null));
+
     return ExpenseModel(
       id: json['id'] as String,
       description: json['description'] as String? ?? '',
@@ -43,9 +51,7 @@ class ExpenseModel {
       createdBy: (json['createdBy'] ?? json['created_by']) as String? ?? 'local-user',
       version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
-      deletedAt: json['deletedAt'] != null
-          ? DateTime.tryParse(json['deletedAt'] as String)
-          : (json['deleted_at'] != null ? DateTime.tryParse(json['deleted_at'] as String) : null),
+      deletedAt: deletedAt,
       createdAt: DateTime.tryParse(json['createdAt'] ?? json['created_at'] ?? '') ?? DateTime.now().toUtc(),
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? json['updated_at'] ?? '') ?? DateTime.now().toUtc(),
     );
