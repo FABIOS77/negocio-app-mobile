@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_constants.dart';
 import '../database/app_database.dart';
@@ -132,14 +133,33 @@ class SyncEngine {
     }
 
     final payloadOps = pendingOps.map((op) {
+      final rawPayload = jsonDecode(op.payload);
+      Map<String, dynamic> cleanPayload = {};
+      if (rawPayload is Map<String, dynamic>) {
+        cleanPayload = Map<String, dynamic>.from(rawPayload);
+        // Sanitizar eliminando metadatos locales exclusivos de SQLite
+        cleanPayload.remove('created_at');
+        cleanPayload.remove('updated_at');
+        cleanPayload.remove('deleted_at');
+        cleanPayload.remove('sync_status');
+        cleanPayload.remove('version');
+        cleanPayload.remove('createdAt');
+        cleanPayload.remove('updatedAt');
+        cleanPayload.remove('deletedAt');
+        cleanPayload.remove('syncStatus');
+      }
+
+      // Convertir client_timestamp a ISO-8601 UTC estricto con sufijo 'Z'
+      final clientTimestampIso = op.clientTimestamp.toUtc().toIso8601String();
+
       return {
         'operation_id': op.operationId,
-        'entity_type': op.entityType,
+        'entity_type': op.entityType.toLowerCase(),
         'entity_id': op.entityId,
-        'operation': op.operation,
-        'payload': jsonDecode(op.payload),
-        'client_timestamp': op.clientTimestamp.toIso8601String(),
-        if (op.baseVersion != null) 'base_version': op.baseVersion,
+        'operation': op.operation.toUpperCase(),
+        'payload': cleanPayload,
+        'client_timestamp': clientTimestampIso,
+        if (op.baseVersion != null) 'base_version': op.baseVersion!.toInt(),
       };
     }).toList();
 
@@ -184,7 +204,13 @@ class SyncEngine {
 
       return (processed: processedCount, conflicts: conflictCount, failed: failedCount);
     } on DioException catch (e) {
-      // Error temporal de red/timeout: aplicar estrategia de retry con backoff
+      if (e.response != null) {
+        debugPrint('SYNC PUSH HTTP ERROR ${e.response?.statusCode}: ${e.response?.data}');
+      } else {
+        debugPrint('SYNC PUSH DIO EXCEPTION: ${e.message}');
+      }
+
+      // Error temporal de red/timeout/5xx: aplicar estrategia de retry
       final isTemporary = e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError ||
@@ -195,12 +221,14 @@ class SyncEngine {
           // Permanecer en PENDING con retry_count incrementado para reintento posterior
           await _queueManager.markOperationStatus(op.operationId, 'PENDING', error: e.message);
         } else {
-          // Excedió reintentos o fallo permanente
-          await _queueManager.markOperationStatus(op.operationId, 'FAILED', error: e.message ?? 'Fallo de envío');
+          // Excedió reintentos o fallo permanente HTTP 400
+          final errData = e.response?.data != null ? e.response?.data.toString() : e.message;
+          await _queueManager.markOperationStatus(op.operationId, 'FAILED', error: errData ?? 'Fallo de envío');
         }
       }
       return (processed: 0, conflicts: 0, failed: pendingOps.length);
     } catch (e) {
+      debugPrint('SYNC PUSH UNHANDLED ERROR: $e');
       for (final op in pendingOps) {
         await _queueManager.markOperationStatus(op.operationId, 'FAILED', error: e.toString());
       }
