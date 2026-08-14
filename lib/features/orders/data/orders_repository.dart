@@ -23,16 +23,17 @@ class OrdersRepository {
         _syncEngine = syncEngine,
         _uuid = uuid ?? const Uuid();
 
-  /// Observa reactivamente los pedidos del día (America/La_Paz) ordenados por orderedAt DESC
+  /// Observa reactivamente los pedidos activos del día (America/La_Paz) ordenados por orderedAt DESC, excluyendo cancelados
   Stream<List<OrderModel>> watchTodayOrders() {
     final todayDate = TimezoneUtils.getTodayBusinessDate();
-    return watchOrders(date: todayDate, limit: 100);
+    return watchOrders(date: todayDate, excludeCancelled: true, limit: 100);
   }
 
   /// Observa pedidos con filtros de fecha, estado e índices de Drift paginados
   Stream<List<OrderModel>> watchOrders({
     String? status,
     String? date,
+    bool excludeCancelled = false,
     int limit = 20,
     int offset = 0,
   }) {
@@ -40,6 +41,8 @@ class OrdersRepository {
 
     if (status != null && status.isNotEmpty) {
       query.where((t) => t.status.equals(status));
+    } else if (excludeCancelled) {
+      query.where((t) => t.status.isNotValue('CANCELLED'));
     }
 
     if (date != null && date.isNotEmpty) {

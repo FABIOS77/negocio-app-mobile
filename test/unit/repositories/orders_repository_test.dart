@@ -159,5 +159,30 @@ void main() {
       final deleteOp = pendingOps.firstWhere((op) => op.operation == 'DELETE' && op.entityId == order.id);
       expect(deleteOp.baseVersion, equals(1));
     });
+
+    test('watchTodayOrders strictly excludes CANCELLED and deleted orders', () async {
+      final dish = await dishesRepo.createDish(name: 'Keperi', price: 35.0);
+
+      // Crear 2 pedidos
+      final order1 = await ordersRepo.createOrder(
+        customerName: 'Cliente Activo',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish.id, quantity: 1)],
+      );
+      final order2 = await ordersRepo.createOrder(
+        customerName: 'Cliente a Cancelar',
+        paymentMethod: 'QR',
+        itemsInput: [(dishId: dish.id, quantity: 2)],
+      );
+
+      // Eliminar el segundo pedido
+      await ordersRepo.deleteOrder(order2.id);
+
+      // watchTodayOrders solo debe contener order1
+      final todayOrders = await ordersRepo.watchTodayOrders().first;
+      expect(todayOrders.length, equals(1));
+      expect(todayOrders.first.id, equals(order1.id));
+      expect(todayOrders.any((o) => o.id == order2.id), isFalse);
+    });
   });
 }

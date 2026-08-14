@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/network_error_parser.dart';
 import '../../application/excel_export_notifier.dart';
 
 class ExportExcelButtonWidget extends ConsumerWidget {
@@ -19,11 +20,13 @@ class ExportExcelButtonWidget extends ConsumerWidget {
 
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: const Color(0xFF1D6F42), // Verde corporativo Excel
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        elevation: 2,
       ),
       icon: isExporting
           ? const SizedBox(
@@ -47,7 +50,9 @@ class ExportExcelButtonWidget extends ConsumerWidget {
                 );
               } catch (e) {
                 if (context.mounted) {
-                  final errorMessage = e is StateError ? e.message : 'Error al exportar reporte Excel: $e';
+                  final errorMessage = e is StateError
+                      ? e.message
+                      : NetworkErrorParser.parse(e, fallback: 'Error al exportar reporte Excel.');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(errorMessage),

@@ -1,7 +1,7 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/sync/sync_engine.dart';
+import '../../../core/utils/network_error_parser.dart';
 
 import '../data/auth_repository.dart';
 import '../domain/user_model.dart';
@@ -66,26 +66,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _repository.login(email, password);
       state = AuthState.authenticated(user);
     } catch (e) {
-      String msg = 'Error de autenticación';
-      if (e is DioException) {
-        final data = e.response?.data;
-        if (data is Map) {
-          final errorMap = data['error'];
-          if (errorMap is Map && errorMap['message'] != null) {
-            msg = errorMap['message'].toString();
-          } else if (data['message'] != null) {
-            msg = data['message'].toString();
-          } else {
-            msg = e.message ?? e.toString();
-          }
-        } else if (e.message != null && e.message!.isNotEmpty) {
-          msg = e.message!;
-        } else {
-          msg = 'HTTP ${e.response?.statusCode ?? 500}: ${e.toString()}';
-        }
-      } else {
-        msg = e.toString();
-      }
+      final msg = NetworkErrorParser.parse(e, fallback: 'Error de autenticación. Intente de nuevo.');
       state = AuthState.error(msg);
     }
   }

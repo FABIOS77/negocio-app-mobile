@@ -29,7 +29,7 @@ class OrderHistoryScreen extends ConsumerWidget {
                     DropdownMenuItem(value: null, child: Text('Todos los Estados')),
                     DropdownMenuItem(value: 'PENDING', child: Text('Pendientes')),
                     DropdownMenuItem(value: 'DELIVERED', child: Text('Entregados')),
-                    DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelados')),
+                    DropdownMenuItem(value: 'CANCELLED', child: Text('Eliminados / Cancelados')),
                   ],
                   onChanged: (val) {
                     ref.read(orderHistoryStatusFilterProvider.notifier).state = val;
@@ -52,35 +52,69 @@ class OrderHistoryScreen extends ConsumerWidget {
                     itemCount: orders.length,
                     itemBuilder: (context, index) {
                       final order = orders[index];
-                      return Card(
-                        child: ListTile(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) => OrderDetailDialog(order: order),
-                            );
-                          },
-                          leading: CircleAvatar(
-                            backgroundColor: order.status == 'DELIVERED'
-                                ? Colors.green.shade100
-                                : (order.status == 'CANCELLED' ? Colors.red.shade100 : Colors.orange.shade100),
-                            child: Icon(
-                              order.status == 'DELIVERED'
-                                  ? Icons.check
-                                  : (order.status == 'CANCELLED' ? Icons.close : Icons.access_time),
-                              color: order.status == 'DELIVERED'
-                                  ? Colors.green
-                                  : (order.status == 'CANCELLED' ? Colors.red : Colors.orange),
+                      final isCancelled = order.status == 'CANCELLED';
+
+                      return Opacity(
+                        opacity: isCancelled ? 0.5 : 1.0,
+                        child: Card(
+                          child: ListTile(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => OrderDetailDialog(order: order),
+                              );
+                            },
+                            leading: CircleAvatar(
+                              backgroundColor: order.status == 'DELIVERED'
+                                  ? Colors.green.shade100
+                                  : (isCancelled ? Colors.red.shade100 : Colors.orange.shade100),
+                              child: Icon(
+                                order.status == 'DELIVERED'
+                                    ? Icons.check
+                                    : (isCancelled ? Icons.close : Icons.access_time),
+                                color: order.status == 'DELIVERED'
+                                    ? Colors.green
+                                    : (isCancelled ? Colors.red : Colors.orange),
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            order.orderNumber != null ? 'Pedido #${order.orderNumber}' : order.customerName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text('Cliente: ${order.customerName} • ${order.paymentMethod}\nSync: ${order.syncStatus}'),
-                          trailing: Text(
-                            CurrencyFormatter.formatBOB(order.total),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    order.orderNumber != null ? 'Pedido #${order.orderNumber}' : order.customerName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      decoration: isCancelled ? TextDecoration.lineThrough : null,
+                                    ),
+                                  ),
+                                ),
+                                if (isCancelled)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'ELIMINADO',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            subtitle: Text('Cliente: ${order.customerName} • ${order.paymentMethod}\nSync: ${order.syncStatus}'),
+                            trailing: Text(
+                              CurrencyFormatter.formatBOB(order.total),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isCancelled ? Colors.grey : Colors.deepOrange,
+                              ),
+                            ),
                           ),
                         ),
                       );

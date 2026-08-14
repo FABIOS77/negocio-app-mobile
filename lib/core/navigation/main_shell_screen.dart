@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/application/auth_notifier.dart';
+import '../../features/common/presentation/widgets/confirm_dialog.dart';
 import '../sync/sync_engine.dart';
 
 class MainShellScreen extends ConsumerWidget {
@@ -79,8 +80,17 @@ class MainShellScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar Sesión',
-            onPressed: () {
-              ref.read(authStateNotifierProvider.notifier).logout();
+            onPressed: () async {
+              final confirmed = await ConfirmDialog.show(
+                context,
+                title: 'Cerrar Sesión',
+                content: '¿Está seguro de que desea cerrar sesión? Se pausará la sincronización.',
+                confirmLabel: 'Cerrar Sesión',
+                confirmColor: Colors.red,
+              );
+              if (confirmed) {
+                ref.read(authStateNotifierProvider.notifier).logout();
+              }
             },
           ),
         ],
