@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../daily_menu/application/daily_menu_notifier.dart';
+import '../../dishes/domain/dish_model.dart';
 import '../application/orders_notifier.dart';
 
 class NewOrderScreen extends ConsumerStatefulWidget {
@@ -25,11 +26,11 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     super.dispose();
   }
 
-  double _calculateTotal(List dishes) {
+  double _calculateTotal(List<DishModel> dishes) {
     double total = 0.0;
     _itemQuantities.forEach((dishId, qty) {
       if (qty > 0) {
-        final dish = dishes.firstWhere((d) => d.id == dishId, orElse: () => null);
+        final dish = dishes.where((d) => d.id == dishId).firstOrNull;
         if (dish != null) {
           total += (dish.price * qty);
         }

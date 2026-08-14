@@ -26,11 +26,14 @@ class DailyMenuScreen extends ConsumerWidget {
         label: const Text('CONFIGURAR MENÚ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: () {
           final dishes = dishesAsync.asData?.value ?? [];
+          final currentSelectedDishIds = todayMenuAsync.asData?.value?.dishes.map((d) => d.id).toList();
+
           showDialog(
             context: context,
             builder: (ctx) => CreateMenuDialog(
               initialDate: todayDate,
               availableDishes: dishes,
+              initialSelectedDishIds: currentSelectedDishIds,
               onRandomDraw: () async {
                 final drawn = repository.drawRandomDishes(dishes);
                 if (drawn.isNotEmpty) {

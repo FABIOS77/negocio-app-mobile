@@ -4,6 +4,7 @@ import '../../dishes/domain/dish_model.dart';
 class CreateMenuDialog extends StatefulWidget {
   final String initialDate;
   final List<DishModel> availableDishes;
+  final List<String>? initialSelectedDishIds;
   final Function(String menuDate, List<String> dishIds) onSave;
   final VoidCallback? onRandomDraw;
 
@@ -11,6 +12,7 @@ class CreateMenuDialog extends StatefulWidget {
     super.key,
     required this.initialDate,
     required this.availableDishes,
+    this.initialSelectedDishIds,
     required this.onSave,
     this.onRandomDraw,
   });
@@ -30,6 +32,9 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
     super.initState();
     _dateController = TextEditingController(text: widget.initialDate);
     _searchController = TextEditingController();
+    if (widget.initialSelectedDishIds != null) {
+      _selectedDishIds.addAll(widget.initialSelectedDishIds!);
+    }
   }
 
   @override
