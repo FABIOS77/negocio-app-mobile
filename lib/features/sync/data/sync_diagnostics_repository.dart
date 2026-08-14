@@ -1,4 +1,6 @@
+import 'package:drift/drift.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/utils/timezone_utils.dart';
 
 class SyncDiagnosticsSummary {
   final int pendingCreateCount;
@@ -48,6 +50,51 @@ class SyncDiagnosticsRepository {
         lastCursor: lastCursor,
         conflicts: conflicts,
       );
+    });
+  }
+
+  /// Depuración y limpieza de datos de prueba locales en SQLite (Transacción Atómica DEV)
+  Future<void> purgeTestData() async {
+    final todayStr = TimezoneUtils.getTodayBusinessDate();
+
+    await _db.transaction(() async {
+      // a) Menú Diario: Identificar duplicados de hoy y conservar únicamente el más reciente
+      final todayMenus = await (_db.select(_db.dailyMenusTable)
+            ..where((t) => t.menuDate.equals(todayStr))
+            ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+          .get();
+
+      if (todayMenus.length > 1) {
+        final duplicateMenuIds = todayMenus.skip(1).map((m) => m.id).toList();
+
+        await (_db.delete(_db.dailyMenuDishesTable)
+              ..where((t) => t.dailyMenuId.isIn(duplicateMenuIds)))
+            .go();
+
+        await (_db.delete(_db.dailyMenusTable)
+              ..where((t) => t.id.isIn(duplicateMenuIds)))
+            .go();
+      }
+
+      // b) Pedidos: Eliminar pedidos de prueba generados durante tests
+      final testOrders = await (_db.select(_db.ordersTable)
+            ..where((t) => t.createdBy.equals('perf-user') | t.customerName.like('Cliente%')))
+          .get();
+
+      if (testOrders.isNotEmpty) {
+        final testOrderIds = testOrders.map((o) => o.id).toList();
+        await (_db.delete(_db.orderItemsTable)
+              ..where((t) => t.orderId.isIn(testOrderIds)))
+            .go();
+        await (_db.delete(_db.ordersTable)
+              ..where((t) => t.id.isIn(testOrderIds)))
+            .go();
+      }
+
+      // c) Cola de Sincronización: Limpiar operaciones huérfanas de prueba o FAILED
+      await (_db.delete(_db.syncQueueTable)
+            ..where((t) => t.status.equals('FAILED') | t.entityId.like('%perf%') | t.entityId.like('%test%') | t.entityId.like('menu-dup%')))
+          .go();
     });
   }
 }

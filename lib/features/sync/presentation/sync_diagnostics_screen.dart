@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/env_config.dart';
 import '../../../core/sync/sync_engine.dart';
+import '../../common/presentation/widgets/confirm_dialog.dart';
 import '../application/sync_diagnostics_notifier.dart';
 
 class SyncDiagnosticsScreen extends ConsumerWidget {
@@ -10,6 +13,8 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final diagnosticsAsync = ref.watch(syncDiagnosticsStreamProvider);
     final syncEngine = ref.read(syncEngineProvider);
+    final repository = ref.read(syncDiagnosticsRepositoryProvider);
+    final isDevMode = kDebugMode || EnvConfig.fromEnvironment().isDev;
 
     return Scaffold(
       appBar: AppBar(
@@ -124,6 +129,40 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
                         }
                       },
                     ),
+                    if (isDevMode) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.cleaning_services),
+                        label: const Text('LIMPIAR DATOS DE PRUEBA LOCALES (DEV ONLY)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        onPressed: () async {
+                          final confirm = await ConfirmDialog.show(
+                            context,
+                            title: 'Limpiar Datos de Prueba',
+                            content: '¿Desea purgar pedidos de prueba y menús duplicados manteniendo su sesión activa y el catálogo de platos?',
+                            confirmLabel: 'SÍ, PURGAR',
+                            confirmColor: Colors.red,
+                          );
+
+                          if (confirm) {
+                            await repository.purgeTestData();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Base de datos local depurada exitosamente. Se conservó el menú actual.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     const Text('Registro de Conflictos y Excepciones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),
