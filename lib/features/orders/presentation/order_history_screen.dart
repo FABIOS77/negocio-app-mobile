@@ -40,6 +40,8 @@ class OrderHistoryScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             Expanded(
               child: historyAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 data: (orders) {
                   if (orders.isEmpty) {
                     return const Center(

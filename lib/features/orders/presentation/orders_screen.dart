@@ -68,6 +68,8 @@ class OrdersScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             todayOrdersAsync.when(
+              skipLoadingOnReload: true,
+              skipLoadingOnRefresh: true,
               data: (orders) {
                 if (orders.isEmpty) {
                   return const Card(

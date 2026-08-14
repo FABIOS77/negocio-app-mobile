@@ -30,25 +30,44 @@ class DailyMenuRepository {
     return watchMenuByDate(todayDate);
   }
 
-  /// Observa un menú diario por fecha YYYY-MM-DD (Tolerante a duplicados usando .watch())
+  /// Observa un menú diario por fecha YYYY-MM-DD (Reactivo y tolerante a duplicados)
   Stream<DailyMenuModel?> watchMenuByDate(String menuDate) {
-    final query = _db.select(_db.dailyMenusTable)
+    final menuQuery = _db.select(_db.dailyMenusTable)
       ..where((t) => t.menuDate.equals(menuDate))
       ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]);
 
-    return query.watch().asyncMap((rows) async {
+    return menuQuery.watch().asyncMap((rows) async {
       if (rows.isEmpty) return null;
-      final menuRow = rows.first;
-      final dishes = await _getDishesForMenu(menuRow.id);
+
+      // 1. Buscar la fila más reciente (ORDER BY createdAt DESC) que contenga platos
+      for (final menuRow in rows) {
+        final dishes = await _getDishesForMenu(menuRow.id);
+        if (dishes.isNotEmpty) {
+          return DailyMenuModel(
+            id: menuRow.id,
+            menuDate: menuRow.menuDate,
+            active: menuRow.active,
+            version: menuRow.version,
+            syncStatus: menuRow.syncStatus,
+            dishes: dishes,
+            createdAt: menuRow.createdAt,
+            updatedAt: menuRow.updatedAt,
+          );
+        }
+      }
+
+      // 2. Si ninguno contiene platos aún, retornar el registro más reciente (rows.first)
+      final newestRow = rows.first;
+      final dishes = await _getDishesForMenu(newestRow.id);
       return DailyMenuModel(
-        id: menuRow.id,
-        menuDate: menuRow.menuDate,
-        active: menuRow.active,
-        version: menuRow.version,
-        syncStatus: menuRow.syncStatus,
+        id: newestRow.id,
+        menuDate: newestRow.menuDate,
+        active: newestRow.active,
+        version: newestRow.version,
+        syncStatus: newestRow.syncStatus,
         dishes: dishes,
-        createdAt: menuRow.createdAt,
-        updatedAt: menuRow.updatedAt,
+        createdAt: newestRow.createdAt,
+        updatedAt: newestRow.updatedAt,
       );
     });
   }

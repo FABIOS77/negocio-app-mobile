@@ -137,6 +137,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
         title: Text(isEditing ? 'Editar Pedido de Cocina' : 'Nuevo Pedido de Cocina', style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: todayMenuAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         data: (menu) {
           final availableDishes = menu?.dishes ?? [];
           final total = _calculateTotal(availableDishes);

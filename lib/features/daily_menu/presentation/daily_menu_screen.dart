@@ -25,8 +25,8 @@ class DailyMenuScreen extends ConsumerWidget {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('CONFIGURAR MENÚ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: () {
-          final dishes = dishesAsync.asData?.value ?? [];
-          final currentSelectedDishIds = todayMenuAsync.asData?.value?.dishes.map((d) => d.id).toList();
+          final dishes = dishesAsync.value ?? [];
+          final currentSelectedDishIds = todayMenuAsync.value?.dishes.map((d) => d.id).toList();
 
           showDialog(
             context: context,
@@ -44,7 +44,7 @@ class DailyMenuScreen extends ConsumerWidget {
                 }
               },
               onSave: (menuDate, dishIds) async {
-                final existing = todayMenuAsync.asData?.value;
+                final existing = todayMenuAsync.value;
                 if (existing != null) {
                   await repository.updateDailyMenu(
                     id: existing.id,
@@ -94,6 +94,8 @@ class DailyMenuScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             Expanded(
               child: todayMenuAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 data: (menu) {
                   if (menu == null || menu.dishes.isEmpty) {
                     return const Center(
