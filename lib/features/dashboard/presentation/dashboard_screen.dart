@@ -29,6 +29,8 @@ class DashboardScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
             child: metricsAsync.when(
+              skipLoadingOnReload: true,
+              skipLoadingOnRefresh: true,
               data: (m) => SyncStatusBannerWidget(
                 pendingCount: m.pendingSyncCount,
                 onSyncTap: () => syncEngine.syncAll(),
@@ -49,29 +51,42 @@ class DashboardScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 10.0,
+                spacing: 12.0,
                 children: [
                   const Text('Resumen Ejecutivo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SegmentedButton<FinancialPeriod>(
-                    segments: const [
-                      ButtonSegment(value: FinancialPeriod.today, label: Text('Hoy')),
-                      ButtonSegment(value: FinancialPeriod.week, label: Text('Semana')),
-                      ButtonSegment(value: FinancialPeriod.month, label: Text('Mes')),
-                    ],
-                    selected: {selectedPeriod},
-                    onSelectionChanged: (val) {
-                      ref.read(dashboardPeriodProvider.notifier).state = val.first;
-                    },
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SegmentedButton<FinancialPeriod>(
+                      segments: const [
+                        ButtonSegment(value: FinancialPeriod.today, label: Text('Hoy')),
+                        ButtonSegment(value: FinancialPeriod.week, label: Text('Semana')),
+                        ButtonSegment(value: FinancialPeriod.month, label: Text('Mes')),
+                      ],
+                      selected: {selectedPeriod},
+                      onSelectionChanged: (val) {
+                        ref.read(dashboardPeriodProvider.notifier).state = val.first;
+                      },
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
               metricsAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 data: (metrics) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (metricsAsync.isRefreshing || metricsAsync.isReloading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8.0),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
                       ExecutiveSummaryCardsWidget(metrics: metrics),
                       const SizedBox(height: 16),
                       PaymentBreakdownWidget(metrics: metrics),
