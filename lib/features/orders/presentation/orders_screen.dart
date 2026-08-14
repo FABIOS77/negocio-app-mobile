@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../common/presentation/widgets/confirm_dialog.dart';
 import '../../common/presentation/widgets/empty_state_widget.dart';
 import '../../production/presentation/production_summary_widget.dart';
 import '../application/orders_notifier.dart';
@@ -14,6 +15,7 @@ class OrdersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final todayOrdersAsync = ref.watch(todayOrdersStreamProvider);
+    final repository = ref.read(ordersRepositoryProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -86,6 +88,7 @@ class OrdersScreen extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final order = orders[index];
                     final isSynced = order.syncStatus == 'SYNCED';
+                    final isPending = order.status == 'PENDING';
 
                     return Card(
                       elevation: 2,
@@ -112,9 +115,46 @@ class OrdersScreen extends ConsumerWidget {
                           '${order.paymentMethod} • Estado: ${order.status}\nItems: ${order.items.length} platos',
                           style: const TextStyle(fontSize: 12),
                         ),
-                        trailing: Text(
-                          CurrencyFormatter.formatBOB(order.total),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              CurrencyFormatter.formatBOB(order.total),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                            ),
+                            if (isPending) ...[
+                              PopupMenuButton<String>(
+                                onSelected: (val) async {
+                                  if (val == 'edit') {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (ctx) => NewOrderScreen(orderToEdit: order)),
+                                    );
+                                  } else if (val == 'delete') {
+                                    final confirmed = await ConfirmDialog.show(
+                                      context,
+                                      title: 'Eliminar Pedido',
+                                      content: '¿Está seguro de eliminar el pedido de ${order.customerName}?',
+                                      confirmLabel: 'SÍ, ELIMINAR',
+                                      confirmColor: Colors.red,
+                                    );
+                                    if (confirmed) {
+                                      await repository.deleteOrder(order.id);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Pedido eliminado localmente'), backgroundColor: Colors.redAccent),
+                                        );
+                                      }
+                                    }
+                                  }
+                                },
+                                itemBuilder: (ctx) => const [
+                                  PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue), SizedBox(width: 8), Text('Editar')])),
+                                  PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Colors.red), SizedBox(width: 8), Text('Eliminar')])),
+                                ],
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     );

@@ -226,6 +226,158 @@ class OrdersRepository {
     return order;
   }
 
+  /// Actualizar pedido en estado PENDING (reemplaza order_items, recalcula total, incrementa version)
+  Future<OrderModel> updateOrder({
+    required String id,
+    required String customerName,
+    String? locationText,
+    required String paymentMethod,
+    required List<({String dishId, int quantity})> itemsInput,
+  }) async {
+    final current = await getOrderById(id);
+    if (current == null) {
+      throw StateError('El pedido no existe');
+    }
+
+    if (current.status != 'PENDING') {
+      throw StateError('Solo se pueden editar pedidos en estado PENDING');
+    }
+
+    if (customerName.trim().isEmpty) {
+      throw ArgumentError('El nombre del cliente es obligatorio');
+    }
+
+    if (itemsInput.isEmpty) {
+      throw ArgumentError('El pedido debe incluir al menos un plato');
+    }
+
+    final now = DateTime.now().toUtc();
+    final updatedVersion = current.version + 1;
+
+    final orderItems = <OrderItemModel>[];
+    double calculatedTotal = 0.0;
+
+    for (final item in itemsInput) {
+      final dish = await (_db.select(_db.dishesTable)..where((t) => t.id.equals(item.dishId))).getSingleOrNull();
+      if (dish == null || !dish.active) {
+        throw StateError('El plato no está disponible en el catálogo local');
+      }
+
+      final unitPrice = dish.price;
+      final subtotal = (unitPrice * item.quantity);
+      calculatedTotal += subtotal;
+
+      final itemId = _uuid.v4();
+      orderItems.add(
+        OrderItemModel(
+          id: itemId,
+          orderId: id,
+          dishId: item.dishId,
+          dishNameSnapshot: dish.name,
+          quantity: item.quantity,
+          unitPrice: unitPrice,
+          subtotal: subtotal,
+        ),
+      );
+    }
+
+    await _db.transaction(() async {
+      // 1. Limpiar items anteriores
+      await (_db.delete(_db.orderItemsTable)..where((t) => t.orderId.equals(id))).go();
+
+      // 2. Insertar nuevos items
+      for (final item in orderItems) {
+        await _db.into(_db.orderItemsTable).insert(
+              OrderItemsTableCompanion.insert(
+                id: item.id,
+                orderId: id,
+                dishId: item.dishId,
+                dishNameSnapshot: item.dishNameSnapshot,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                subtotal: item.subtotal,
+              ),
+            );
+      }
+
+      // 3. Actualizar cabecera del pedido
+      await (_db.update(_db.ordersTable)..where((t) => t.id.equals(id))).write(
+        OrdersTableCompanion(
+          customerName: Value(customerName.trim()),
+          locationText: Value(locationText != null && locationText.trim().isNotEmpty ? locationText.trim() : null),
+          paymentMethod: Value(paymentMethod),
+          total: Value(calculatedTotal),
+          version: Value(updatedVersion),
+          syncStatus: const Value('PENDING'),
+          updatedAt: Value(now),
+        ),
+      );
+    });
+
+    final updatedOrder = OrderModel(
+      id: id,
+      orderNumber: current.orderNumber,
+      customerName: customerName.trim(),
+      locationText: locationText?.trim(),
+      total: calculatedTotal,
+      paymentMethod: paymentMethod,
+      status: current.status,
+      orderedAt: current.orderedAt,
+      createdBy: current.createdBy,
+      version: updatedVersion,
+      syncStatus: 'PENDING',
+      items: orderItems,
+      createdAt: current.createdAt,
+      updatedAt: now,
+    );
+
+    await _queueManager.enqueueOperation(
+      entityType: 'order',
+      entityId: id,
+      operation: 'UPDATE',
+      payload: {
+        'customer_name': updatedOrder.customerName,
+        if (updatedOrder.locationText != null) 'location_text': updatedOrder.locationText,
+        'payment_method': updatedOrder.paymentMethod,
+        'items': orderItems.map((i) => {'dish_id': i.dishId, 'quantity': i.quantity}).toList(),
+      },
+      baseVersion: current.version,
+    );
+
+    _syncEngine.syncAll();
+    return updatedOrder;
+  }
+
+  /// Eliminar pedido (soft delete marca status CANCELLED, encola DELETE en SyncQueueTable)
+  Future<void> deleteOrder(String id) async {
+    final current = await getOrderById(id);
+    if (current == null) return;
+
+    final now = DateTime.now().toUtc();
+    final updatedVersion = current.version + 1;
+
+    await _db.transaction(() async {
+      await (_db.update(_db.ordersTable)..where((t) => t.id.equals(id))).write(
+        OrdersTableCompanion(
+          status: const Value('CANCELLED'),
+          version: Value(updatedVersion),
+          syncStatus: const Value('PENDING'),
+          updatedAt: Value(now),
+        ),
+      );
+    });
+
+    await _queueManager.enqueueOperation(
+      entityType: 'order',
+      entityId: id,
+      operation: 'DELETE',
+      payload: {'id': id},
+      baseVersion: current.version,
+    );
+
+    _syncEngine.syncAll();
+  }
+
   Future<void> changeOrderStatus(String id, String newStatus) async {
     final current = await getOrderById(id);
     if (current == null) return;

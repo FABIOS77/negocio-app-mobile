@@ -4,20 +4,38 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../daily_menu/application/daily_menu_notifier.dart';
 import '../../dishes/domain/dish_model.dart';
 import '../application/orders_notifier.dart';
+import '../domain/order_model.dart';
 
 class NewOrderScreen extends ConsumerStatefulWidget {
-  const NewOrderScreen({super.key});
+  final OrderModel? orderToEdit;
+
+  const NewOrderScreen({super.key, this.orderToEdit});
 
   @override
   ConsumerState<NewOrderScreen> createState() => _NewOrderScreenState();
 }
 
 class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
-  final _customerController = TextEditingController();
-  final _locationController = TextEditingController();
-  String _paymentMethod = 'CASH';
+  late TextEditingController _customerController;
+  late TextEditingController _locationController;
+  late String _paymentMethod;
   final Map<String, int> _itemQuantities = {};
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final edit = widget.orderToEdit;
+    _customerController = TextEditingController(text: edit?.customerName ?? '');
+    _locationController = TextEditingController(text: edit?.locationText ?? '');
+    _paymentMethod = edit?.paymentMethod ?? 'CASH';
+
+    if (edit != null) {
+      for (final item in edit.items) {
+        _itemQuantities[item.dishId] = item.quantity;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -66,23 +84,42 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
 
     try {
       final repository = ref.read(ordersRepositoryProvider);
-      await repository.createOrder(
-        customerName: customer,
-        locationText: _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
-        paymentMethod: _paymentMethod,
-        itemsInput: selectedItems,
-      );
+      final locationText = _locationController.text.trim().isEmpty ? null : _locationController.text.trim();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Pedido registrado localmente!'), backgroundColor: Colors.green),
+      if (widget.orderToEdit != null) {
+        await repository.updateOrder(
+          id: widget.orderToEdit!.id,
+          customerName: customer,
+          locationText: locationText,
+          paymentMethod: _paymentMethod,
+          itemsInput: selectedItems,
         );
-        Navigator.pop(context);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('¡Pedido actualizado localmente!'), backgroundColor: Colors.green),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        await repository.createOrder(
+          customerName: customer,
+          locationText: locationText,
+          paymentMethod: _paymentMethod,
+          itemsInput: selectedItems,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('¡Pedido registrado localmente!'), backgroundColor: Colors.green),
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear pedido: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('Error al guardar pedido: $e'), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -93,10 +130,11 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
   @override
   Widget build(BuildContext context) {
     final todayMenuAsync = ref.watch(todayMenuStreamProvider);
+    final isEditing = widget.orderToEdit != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nuevo Pedido de Cocina', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEditing ? 'Editar Pedido de Cocina' : 'Nuevo Pedido de Cocina', style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: todayMenuAsync.when(
         data: (menu) {
@@ -232,14 +270,14 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: isEditing ? Colors.blue : Colors.green,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                         ),
-                        icon: const Icon(Icons.check),
+                        icon: Icon(isEditing ? Icons.save : Icons.check),
                         label: _isSubmitting
                             ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text('GUARDAR PEDIDO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            : Text(isEditing ? 'ACTUALIZAR PEDIDO' : 'GUARDAR PEDIDO', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         onPressed: _isSubmitting ? null : _submit,
                       ),
                     ],

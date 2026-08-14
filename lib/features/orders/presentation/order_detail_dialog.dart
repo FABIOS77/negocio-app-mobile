@@ -4,6 +4,7 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../common/presentation/widgets/confirm_dialog.dart';
 import '../application/orders_notifier.dart';
 import '../domain/order_model.dart';
+import 'new_order_screen.dart';
 
 class OrderDetailDialog extends ConsumerWidget {
   final OrderModel order;
@@ -14,6 +15,7 @@ class OrderDetailDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.read(ordersRepositoryProvider);
     final isTerminal = order.status == 'DELIVERED' || order.status == 'CANCELLED';
+    final isPending = order.status == 'PENDING';
 
     return AlertDialog(
       title: Row(
@@ -86,14 +88,49 @@ class OrderDetailDialog extends ConsumerWidget {
         ),
       ),
       actions: [
+        if (isPending) ...[
+          IconButton(
+            icon: const Icon(Icons.edit, color: Colors.blue),
+            tooltip: 'Editar Pedido',
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (ctx) => NewOrderScreen(orderToEdit: order)),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            tooltip: 'Eliminar Pedido',
+            onPressed: () async {
+              final confirmed = await ConfirmDialog.show(
+                context,
+                title: 'Eliminar Pedido',
+                content: '¿Está seguro de eliminar el pedido de ${order.customerName} por ${CurrencyFormatter.formatBOB(order.total)}?',
+                confirmLabel: 'SÍ, ELIMINAR',
+                confirmColor: Colors.red,
+              );
+              if (confirmed) {
+                await repository.deleteOrder(order.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Pedido eliminado localmente'), backgroundColor: Colors.redAccent),
+                  );
+                  Navigator.pop(context);
+                }
+              }
+            },
+          ),
+        ],
         if (!isTerminal) ...[
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
-              minimumSize: const Size(110, 48), // Área táctil de 48dp
+              minimumSize: const Size(100, 44),
             ),
-            icon: const Icon(Icons.check),
+            icon: const Icon(Icons.check, size: 18),
             label: const Text('ENTREGAR'),
             onPressed: () async {
               await repository.changeOrderStatus(order.id, 'DELIVERED');
@@ -105,36 +142,9 @@ class OrderDetailDialog extends ConsumerWidget {
               }
             },
           ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(110, 48), // Área táctil de 48dp
-            ),
-            icon: const Icon(Icons.cancel),
-            label: const Text('CANCELAR'),
-            onPressed: () async {
-              final confirmed = await ConfirmDialog.show(
-                context,
-                title: 'Cancelar Pedido',
-                content: '¿Está seguro de cancelar el pedido de ${order.customerName} por ${CurrencyFormatter.formatBOB(order.total)}?',
-                confirmLabel: 'SÍ, CANCELAR',
-                confirmColor: Colors.red,
-              );
-              if (confirmed) {
-                await repository.changeOrderStatus(order.id, 'CANCELLED');
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Pedido CANCELADO')),
-                  );
-                  Navigator.pop(context);
-                }
-              }
-            },
-          ),
         ],
         TextButton(
-          style: TextButton.styleFrom(minimumSize: const Size(80, 48)),
+          style: TextButton.styleFrom(minimumSize: const Size(60, 44)),
           onPressed: () => Navigator.pop(context),
           child: const Text('Cerrar'),
         ),

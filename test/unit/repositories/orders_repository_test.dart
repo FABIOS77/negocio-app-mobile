@@ -92,5 +92,72 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test('Update order in PENDING status replaces items, recalculates total, increments version and enqueues UPDATE', () async {
+      final dish1 = await dishesRepo.createDish(name: 'Sopa de Maní', price: 20.0);
+      final dish2 = await dishesRepo.createDish(name: 'Pique Macho', price: 50.0);
+
+      final order = await ordersRepo.createOrder(
+        customerName: 'Juan',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish1.id, quantity: 1)],
+      );
+
+      expect(order.total, equals(20.0));
+      expect(order.version, equals(1));
+
+      final updatedOrder = await ordersRepo.updateOrder(
+        id: order.id,
+        customerName: 'Juan Pérez',
+        locationText: 'Mesa 3',
+        paymentMethod: 'QR',
+        itemsInput: [
+          (dishId: dish1.id, quantity: 2),
+          (dishId: dish2.id, quantity: 1),
+        ],
+      );
+
+      expect(updatedOrder.customerName, equals('Juan Pérez'));
+      expect(updatedOrder.locationText, equals('Mesa 3'));
+      expect(updatedOrder.paymentMethod, equals('QR'));
+      expect(updatedOrder.total, equals(90.0)); // 20*2 + 50*1 = 90
+      expect(updatedOrder.version, equals(2));
+      expect(updatedOrder.items.length, equals(2));
+
+      final pendingOps = await queueManager.getPendingOperations();
+      final updateOp = pendingOps.firstWhere((op) => op.operation == 'UPDATE' && op.entityId == order.id);
+      expect(updateOp.baseVersion, equals(1));
+
+      // Verificar que intentar editar un pedido en estado DELIVERED lanza StateError
+      await ordersRepo.changeOrderStatus(order.id, 'DELIVERED');
+      expect(
+        () => ordersRepo.updateOrder(
+          id: order.id,
+          customerName: 'Juan Editado',
+          paymentMethod: 'CASH',
+          itemsInput: [(dishId: dish1.id, quantity: 1)],
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('Delete order marks status CANCELLED, sets deletedAt, increments version and enqueues DELETE', () async {
+      final dish = await dishesRepo.createDish(name: 'Majadito', price: 25.0);
+      final order = await ordersRepo.createOrder(
+        customerName: 'Pedro',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish.id, quantity: 1)],
+      );
+
+      await ordersRepo.deleteOrder(order.id);
+
+      final deletedOrder = await ordersRepo.getOrderById(order.id);
+      expect(deletedOrder!.status, equals('CANCELLED'));
+      expect(deletedOrder.version, equals(2));
+
+      final pendingOps = await queueManager.getPendingOperations();
+      final deleteOp = pendingOps.firstWhere((op) => op.operation == 'DELETE' && op.entityId == order.id);
+      expect(deleteOp.baseVersion, equals(1));
+    });
   });
 }
