@@ -103,5 +103,41 @@ void main() {
       expect(metrics.topDishes.last.dishName, equals('Sopa de Maní'));
       expect(metrics.topDishes.last.totalQuantity, equals(2));
     });
+
+    test('Strictly excludes CANCELLED and soft-deleted orders from order count, sales and Top 5', () async {
+      final dish1 = await dishesRepo.createDish(name: 'Keperi al Horno', price: 40.0);
+      final dish2 = await dishesRepo.createDish(name: 'Chicharrón de Cerdo', price: 50.0);
+
+      // Pedido 1: Válido (Bs 40.0 CASH, 1 Keperi)
+      await ordersRepo.createOrder(
+        customerName: 'Cliente Válido',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish1.id, quantity: 1)],
+      );
+
+      // Pedido 2: Se va a eliminar (Bs 250.0 QR, 5 Chicharrones)
+      final orderToDelete = await ordersRepo.createOrder(
+        customerName: 'Cliente Cancelado',
+        paymentMethod: 'QR',
+        itemsInput: [(dishId: dish2.id, quantity: 5)],
+      );
+
+      // Eliminar el pedido 2
+      await ordersRepo.deleteOrder(orderToDelete.id);
+
+      final metrics = await dashboardRepo.watchDashboardMetrics(period: FinancialPeriod.today).first;
+
+      // Debe contar exactamente 1 pedido (no 2)
+      expect(metrics.totalOrders, equals(1));
+      // Las ventas deben ser solo Bs 40.0 (no 290.0)
+      expect(metrics.totalSales, equals(40.0));
+      expect(metrics.cashSales, equals(40.0));
+      expect(metrics.qrSales, equals(0.0));
+
+      // Top platos solo debe contener Keperi al Horno con 1 porción, ignorando el Chicharrón cancelado
+      expect(metrics.topDishes.length, equals(1));
+      expect(metrics.topDishes.first.dishName, equals('Keperi al Horno'));
+      expect(metrics.topDishes.first.totalQuantity, equals(1));
+    });
   });
 }

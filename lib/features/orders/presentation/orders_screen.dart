@@ -19,22 +19,10 @@ class OrdersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestión de Pedidos Hoy', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Historial de Pedidos',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (ctx) => const OrderHistoryScreen()),
-              );
-            },
-          ),
-        ],
+        title: const Text('Gestión de Pedidos', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.deepOrange,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('NUEVO PEDIDO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: () {
@@ -49,12 +37,18 @@ class OrdersScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. Resumen de Producción de Cocina (Agrupado por Platos)
             const ProductionSummaryWidget(),
             const SizedBox(height: 20),
+
+            // 2. Cabecera y Lista de Pedidos de Hoy
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Pedidos de Hoy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Pedidos de Hoy:',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 TextButton(
                   onPressed: () {
                     Navigator.push(
@@ -71,7 +65,9 @@ class OrdersScreen extends ConsumerWidget {
               skipLoadingOnReload: true,
               skipLoadingOnRefresh: true,
               data: (orders) {
-                if (orders.isEmpty) {
+                final activeOrders = orders.where((o) => o.status != 'CANCELLED').toList();
+
+                if (activeOrders.isEmpty) {
                   return const Card(
                     child: Padding(
                       padding: EdgeInsets.all(16.0),
@@ -86,9 +82,9 @@ class OrdersScreen extends ConsumerWidget {
                 return ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: orders.length,
+                  itemCount: activeOrders.length,
                   itemBuilder: (context, index) {
-                    final order = orders[index];
+                    final order = activeOrders[index];
                     final isSynced = order.syncStatus == 'SYNCED';
                     final isPending = order.status == 'PENDING';
 
