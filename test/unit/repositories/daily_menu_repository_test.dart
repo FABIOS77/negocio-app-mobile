@@ -47,26 +47,31 @@ void main() {
   });
 
   group('DailyMenuRepository Unit Tests', () {
-    test('Create Daily Menu with Dishes using atomic Drift Transaction', () async {
-      // 1. Crear platos
+    test('Create Daily Menu with 3 Dishes using atomic Drift Transaction and relational 1-to-N grouping', () async {
+      // 1. Crear 3 platos en el catálogo
       final dish1 = await dishesRepo.createDish(name: 'Sopa de Maní', price: 15.0);
       final dish2 = await dishesRepo.createDish(name: 'Silpancho Cochabambino', price: 30.0);
+      final dish3 = await dishesRepo.createDish(name: 'Majadito de Pollo', price: 25.0);
 
       final todayDate = TimezoneUtils.getTodayBusinessDate();
 
-      // 2. Crear menú diario con transacción atómica
+      // 2. Crear menú diario con 3 platos en transacción atómica
       final menu = await menuRepo.createDailyMenu(
         menuDate: todayDate,
-        dishIds: [dish1.id, dish2.id],
+        dishIds: [dish1.id, dish2.id, dish3.id],
       );
 
       expect(menu.menuDate, equals(todayDate));
-      expect(menu.dishes.length, equals(2));
+      expect(menu.dishes.length, equals(3));
 
-      // 3. Consultar hoy reactivamente
+      // 3. Consultar hoy reactivamente mediante watchMenuByDate (JOIN + Agrupación 1-a-N)
       final todayMenu = await menuRepo.watchTodayMenu().first;
       expect(todayMenu, isNotNull);
-      expect(todayMenu!.dishes.map((d) => d.id), containsAll([dish1.id, dish2.id]));
+      expect(todayMenu!.dishes.length, equals(3));
+      expect(
+        todayMenu.dishes.map((d) => d.name),
+        containsAll(['Sopa de Maní', 'Silpancho Cochabambino', 'Majadito de Pollo']),
+      );
     });
   });
 }

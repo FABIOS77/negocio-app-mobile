@@ -30,44 +30,73 @@ class DailyMenuRepository {
     return watchMenuByDate(todayDate);
   }
 
-  /// Observa un menú diario por fecha YYYY-MM-DD (Reactivo y tolerante a duplicados)
+  /// Observa un menú diario por fecha YYYY-MM-DD con mapeo relacional 1-a-N completo
   Stream<DailyMenuModel?> watchMenuByDate(String menuDate) {
-    final menuQuery = _db.select(_db.dailyMenusTable)
-      ..where((t) => t.menuDate.equals(menuDate))
-      ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]);
+    final query = _db.select(_db.dailyMenusTable).join([
+      leftOuterJoin(
+        _db.dailyMenuDishesTable,
+        _db.dailyMenuDishesTable.dailyMenuId.equalsExp(_db.dailyMenusTable.id),
+      ),
+      leftOuterJoin(
+        _db.dishesTable,
+        _db.dishesTable.id.equalsExp(_db.dailyMenuDishesTable.dishId),
+      ),
+    ])
+      ..where(_db.dailyMenusTable.menuDate.equals(menuDate))
+      ..orderBy([OrderingTerm(expression: _db.dailyMenusTable.createdAt, mode: OrderingMode.desc)]);
 
-    return menuQuery.watch().asyncMap((rows) async {
+    return query.watch().map((rows) {
       if (rows.isEmpty) return null;
 
-      // 1. Buscar la fila más reciente (ORDER BY createdAt DESC) que contenga platos
-      for (final menuRow in rows) {
-        final dishes = await _getDishesForMenu(menuRow.id);
-        if (dishes.isNotEmpty) {
-          return DailyMenuModel(
-            id: menuRow.id,
-            menuDate: menuRow.menuDate,
-            active: menuRow.active,
-            version: menuRow.version,
-            syncStatus: menuRow.syncStatus,
-            dishes: dishes,
-            createdAt: menuRow.createdAt,
-            updatedAt: menuRow.updatedAt,
-          );
+      // 1. Agrupar filas del JOIN plano de SQLite por ID del menú
+      final Map<String, List<TypedResult>> grouped = {};
+      for (final row in rows) {
+        final menuId = row.readTable(_db.dailyMenusTable).id;
+        grouped.putIfAbsent(menuId, () => []).add(row);
+      }
+
+      // 2. Seleccionar el menú correspondiente a la fecha actual (el más reciente con platos o el primero)
+      String? selectedMenuId;
+      for (final entry in grouped.entries) {
+        final hasDishes = entry.value.any((r) => r.readTableOrNull(_db.dishesTable) != null);
+        if (hasDishes) {
+          selectedMenuId = entry.key;
+          break;
         }
       }
 
-      // 2. Si ninguno contiene platos aún, retornar el registro más reciente (rows.first)
-      final newestRow = rows.first;
-      final dishes = await _getDishesForMenu(newestRow.id);
+      selectedMenuId ??= grouped.keys.first;
+      final selectedRows = grouped[selectedMenuId]!;
+      final menuRow = selectedRows.first.readTable(_db.dailyMenusTable);
+
+      // 3. Extraer la lista completa de platos (1-a-N) mapeando todas las filas correspondientes al menú
+      final dishes = selectedRows
+          .map((r) => r.readTableOrNull(_db.dishesTable))
+          .whereType<DishesTableData>()
+          .map((r) => DishModel(
+                id: r.id,
+                name: r.name,
+                description: r.description,
+                price: r.price,
+                imageUrl: r.imageUrl,
+                active: r.active,
+                version: r.version,
+                syncStatus: r.syncStatus,
+                deletedAt: r.deletedAt,
+                createdAt: r.createdAt,
+                updatedAt: r.updatedAt,
+              ))
+          .toList();
+
       return DailyMenuModel(
-        id: newestRow.id,
-        menuDate: newestRow.menuDate,
-        active: newestRow.active,
-        version: newestRow.version,
-        syncStatus: newestRow.syncStatus,
+        id: menuRow.id,
+        menuDate: menuRow.menuDate,
+        active: menuRow.active,
+        version: menuRow.version,
+        syncStatus: menuRow.syncStatus,
         dishes: dishes,
-        createdAt: newestRow.createdAt,
-        updatedAt: newestRow.updatedAt,
+        createdAt: menuRow.createdAt,
+        updatedAt: menuRow.updatedAt,
       );
     });
   }
