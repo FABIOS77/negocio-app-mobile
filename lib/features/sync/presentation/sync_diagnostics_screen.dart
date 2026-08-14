@@ -66,6 +66,11 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             diagnosticsAsync.when(
               data: (summary) {
+                final failedOrConflictOps = [
+                  ...summary.failedOperations,
+                  ...summary.conflicts,
+                ];
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -126,6 +131,39 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
                               ),
                             ),
                           );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('clear_sync_queue_button'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.deepOrange.shade800,
+                        side: BorderSide(color: Colors.deepOrange.shade800),
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.delete_sweep),
+                      label: const Text('VACIAR COLA DE SINCRONIZACIÓN (FORZAR LIMPIEZA)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      onPressed: () async {
+                        final confirm = await ConfirmDialog.show(
+                          context,
+                          title: 'Vaciar Cola de Sincronización',
+                          content: '¿Está seguro de vaciar la cola de sincronización? Esto desatascará los intentos fallidos acumulados. Los datos reales en SQLite NO se eliminarán.',
+                          confirmLabel: 'SÍ, VACIAR COLA',
+                          confirmColor: Colors.red,
+                        );
+
+                        if (confirm) {
+                          final count = await repository.clearSyncQueue();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Cola de sincronización vaciada. $count operaciones removidas.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
                         }
                       },
                     ),
@@ -195,15 +233,15 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
                       ),
                     ],
                     const SizedBox(height: 20),
-                    const Text('Registro de Conflictos y Excepciones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Registro de Errores y Excepciones PUSH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),
-                    if (summary.conflicts.isEmpty)
+                    if (failedOrConflictOps.isEmpty)
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(16.0),
                           child: Center(
                             child: Text(
-                              'No hay conflictos detectados. Todos los datos están en orden.',
+                              'No hay errores ni conflictos registrados en la cola.',
                               style: TextStyle(color: Colors.grey),
                             ),
                           ),
@@ -213,15 +251,81 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: summary.conflicts.length,
+                        itemCount: failedOrConflictOps.length,
                         itemBuilder: (context, index) {
-                          final c = summary.conflicts[index];
+                          final op = failedOrConflictOps[index];
+                          final isFailed = op.status == 'FAILED';
+
                           return Card(
-                            color: Colors.red.shade50,
-                            child: ListTile(
-                              leading: const Icon(Icons.warning, color: Colors.red),
-                              title: Text('${c.entityType} (${c.operation})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Error: ${c.lastError ?? "Conflicto detectado"}\nIntentos: ${c.retryCount}'),
+                            color: isFailed ? Colors.red.shade50 : Colors.amber.shade50,
+                            elevation: 2,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            isFailed ? Icons.error_outline : Icons.warning_amber_rounded,
+                                            color: isFailed ? Colors.red : Colors.amber.shade900,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '${op.entityType.toUpperCase()} (${op.operation})',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                        ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isFailed ? Colors.red : Colors.amber.shade800,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          op.status,
+                                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'ID Entidad: ${op.entityId}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                  if (op.lastError != null && op.lastError!.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: isFailed ? Colors.red.shade200 : Colors.amber.shade300),
+                                      ),
+                                      child: SelectableText(
+                                        'Error: ${op.lastError}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontFamily: 'monospace',
+                                          color: isFailed ? Colors.red.shade900 : Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Intentos: ${op.retryCount} • Fecha: ${op.clientTimestamp.toLocal()}',
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },

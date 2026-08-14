@@ -82,5 +82,28 @@ void main() {
       expect(summary.conflicts.length, equals(1));
       expect(summary.conflicts.first.lastError, equals('VERSION_CONFLICT'));
     });
+
+    test('clearSyncQueue empties SyncQueueTable completely', () async {
+      final now = DateTime.now().toUtc();
+      await db.into(db.syncQueueTable).insert(
+            SyncQueueTableCompanion.insert(
+              operationId: 'op-clear-1',
+              entityType: 'order',
+              entityId: 'ord-1',
+              operation: 'CREATE',
+              payload: '{}',
+              clientTimestamp: now,
+              status: const Value('FAILED'),
+              lastError: const Value('Validation Error: items missing'),
+              createdAt: now,
+            ),
+          );
+
+      final count = await repo.clearSyncQueue();
+      expect(count, equals(1));
+
+      final summary = await repo.watchDiagnosticsSummary().first;
+      expect(summary.allQueueItems, isEmpty);
+    });
   });
 }

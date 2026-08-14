@@ -9,6 +9,8 @@ class SyncDiagnosticsSummary {
   final int totalPendingCount;
   final String lastCursor;
   final List<SyncQueueTableData> conflicts;
+  final List<SyncQueueTableData> failedOperations;
+  final List<SyncQueueTableData> allQueueItems;
 
   SyncDiagnosticsSummary({
     required this.pendingCreateCount,
@@ -17,6 +19,8 @@ class SyncDiagnosticsSummary {
     required this.totalPendingCount,
     required this.lastCursor,
     required this.conflicts,
+    required this.failedOperations,
+    required this.allQueueItems,
   });
 }
 
@@ -41,6 +45,7 @@ class SyncDiagnosticsRepository {
       final lastCursorRecord = metadataItems.where((m) => m.key == 'last_cursor');
       final lastCursor = lastCursorRecord.isNotEmpty ? lastCursorRecord.first.value : '0';
       final conflicts = queueItems.where((i) => i.status == 'CONFLICT').toList();
+      final failedOps = queueItems.where((i) => i.status == 'FAILED').toList();
 
       return SyncDiagnosticsSummary(
         pendingCreateCount: pendingCreate,
@@ -49,6 +54,8 @@ class SyncDiagnosticsRepository {
         totalPendingCount: totalPending,
         lastCursor: lastCursor,
         conflicts: conflicts,
+        failedOperations: failedOps,
+        allQueueItems: queueItems,
       );
     });
   }
@@ -62,6 +69,11 @@ class SyncDiagnosticsRepository {
           retryCount: Value(0),
           lastError: Value(null),
         ));
+  }
+
+  /// Vacía por completo la cola de sincronización (SyncQueueTable) para desatascar intentos fallidos
+  Future<int> clearSyncQueue() async {
+    return await _db.delete(_db.syncQueueTable).go();
   }
 
   /// Depuración y limpieza de datos de prueba locales en SQLite (Transacción Atómica DEV)
