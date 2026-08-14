@@ -53,6 +53,17 @@ class SyncDiagnosticsRepository {
     });
   }
 
+  /// Rescata operaciones fallidas (FAILED) en SyncQueueTable restableciendo su estado a PENDING y retryCount = 0
+  Future<int> retryFailedOperations() async {
+    return await (_db.update(_db.syncQueueTable)
+          ..where((t) => t.status.equals('FAILED')))
+        .write(const SyncQueueTableCompanion(
+          status: Value('PENDING'),
+          retryCount: Value(0),
+          lastError: Value(null),
+        ));
+  }
+
   /// Depuración y limpieza de datos de prueba locales en SQLite (Transacción Atómica DEV)
   Future<void> purgeTestData() async {
     final todayStr = TimezoneUtils.getTodayBusinessDate();

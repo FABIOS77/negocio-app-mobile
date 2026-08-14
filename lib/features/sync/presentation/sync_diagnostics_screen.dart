@@ -131,6 +131,37 @@ class SyncDiagnosticsScreen extends ConsumerWidget {
                     ),
                     if (isDevMode) ...[
                       const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        key: const Key('retry_failed_button'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber.shade800,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.replay),
+                        label: const Text('REINTENTAR OPERACIONES FALLIDAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        onPressed: () async {
+                          final count = await repository.retryFailedOperations();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$count operaciones rescatadas. Reintentando sincronización...')),
+                            );
+                          }
+                          final result = await syncEngine.syncAll();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  result.message ??
+                                      'Reintento completado: ${result.pushedCount} enviados, ${result.pulledCount} recibidos.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red,

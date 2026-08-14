@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class TopDishModel {
   final String dishId;
   final String dishName;
@@ -15,8 +17,8 @@ class TopDishModel {
     return TopDishModel(
       dishId: (json['dish_id'] ?? json['dishId']) as String? ?? '',
       dishName: (json['dish_name_snapshot'] ?? json['dish_name'] ?? json['dishName']) as String? ?? 'Plato',
-      totalQuantity: (json['total_quantity'] ?? json['totalQuantity'] as num?)?.toInt() ?? 0,
-      totalRevenue: (json['total_revenue'] ?? json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
+      totalQuantity: ParseUtils.toInt(json['total_quantity'] ?? json['totalQuantity']),
+      totalRevenue: ParseUtils.toDouble(json['total_revenue'] ?? json['totalRevenue']),
     );
   }
 }

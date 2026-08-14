@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class ProductionItemModel {
   final String dishId;
   final String dishName;
@@ -13,7 +15,7 @@ class ProductionItemModel {
     return ProductionItemModel(
       dishId: (json['dish_id'] ?? json['dishId']) as String? ?? '',
       dishName: (json['dish_name'] ?? json['dishName'] ?? json['name']) as String? ?? 'Plato',
-      totalQuantity: (json['total_quantity'] ?? json['quantity'] ?? json['totalQuantity'] as num?)?.toInt() ?? 0,
+      totalQuantity: ParseUtils.toInt(json['total_quantity'] ?? json['quantity'] ?? json['totalQuantity']),
     );
   }
 }

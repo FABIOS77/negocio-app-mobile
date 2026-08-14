@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class OrderItemModel {
   final String id;
   final String orderId;
@@ -18,9 +20,10 @@ class OrderItemModel {
   });
 
   factory OrderItemModel.fromJson(Map<String, dynamic> json) {
-    final qty = (json['quantity'] as num?)?.toInt() ?? 1;
-    final price = (json['unitPrice'] as num?)?.toDouble() ?? (json['unit_price'] as num?)?.toDouble() ?? 0.0;
-    final calculatedSubtotal = (json['subtotal'] as num?)?.toDouble() ?? (qty * price);
+    final qty = ParseUtils.toInt(json['quantity'], 1);
+    final price = ParseUtils.toDouble(json['unitPrice'] ?? json['unit_price']);
+    final rawSubtotal = json['subtotal'];
+    final calculatedSubtotal = rawSubtotal != null ? ParseUtils.toDouble(rawSubtotal) : (qty * price);
 
     return OrderItemModel(
       id: json['id'] as String? ?? '',

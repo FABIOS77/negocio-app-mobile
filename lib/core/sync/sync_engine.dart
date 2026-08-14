@@ -7,6 +7,7 @@ import '../config/app_constants.dart';
 import '../database/app_database.dart';
 import '../network/dio_client.dart';
 import '../network/network_info.dart';
+import '../utils/parse_utils.dart';
 import 'sync_queue_manager.dart';
 
 class SyncResult {
@@ -134,19 +135,76 @@ class SyncEngine {
 
     final payloadOps = pendingOps.map((op) {
       final rawPayload = jsonDecode(op.payload);
+      final entityType = op.entityType.toLowerCase();
       Map<String, dynamic> cleanPayload = {};
+
       if (rawPayload is Map<String, dynamic>) {
-        cleanPayload = Map<String, dynamic>.from(rawPayload);
-        // Sanitizar eliminando metadatos locales exclusivos de SQLite
-        cleanPayload.remove('created_at');
-        cleanPayload.remove('updated_at');
-        cleanPayload.remove('deleted_at');
-        cleanPayload.remove('sync_status');
-        cleanPayload.remove('version');
-        cleanPayload.remove('createdAt');
-        cleanPayload.remove('updatedAt');
-        cleanPayload.remove('deletedAt');
-        cleanPayload.remove('syncStatus');
+        if (entityType == 'dish') {
+          cleanPayload = {
+            'name': (rawPayload['name'] ?? '').toString().trim(),
+            'price': ParseUtils.toDouble(rawPayload['price']),
+            if (rawPayload['description'] != null && rawPayload['description'].toString().trim().isNotEmpty)
+              'description': rawPayload['description'].toString().trim(),
+            if (rawPayload['image_url'] != null || rawPayload['imageUrl'] != null)
+              'image_url': (rawPayload['image_url'] ?? rawPayload['imageUrl'])?.toString().trim(),
+            if (rawPayload['active'] != null) 'active': rawPayload['active'] == true,
+          };
+        } else if (entityType == 'daily_menu') {
+          final rawDishes = rawPayload['dish_ids'] ?? rawPayload['dishes'] ?? [];
+          final List<String> dishIds = [];
+          if (rawDishes is List) {
+            for (final item in rawDishes) {
+              if (item is String) {
+                dishIds.add(item);
+              } else if (item is Map && item['id'] != null) {
+                dishIds.add(item['id'].toString());
+              }
+            }
+          }
+          cleanPayload = {
+            'menu_date': (rawPayload['menu_date'] ?? rawPayload['menuDate'])?.toString() ?? '',
+            'dish_ids': dishIds,
+          };
+        } else if (entityType == 'order') {
+          final rawItems = rawPayload['items'] ?? [];
+          final List<Map<String, dynamic>> itemsList = [];
+          if (rawItems is List) {
+            for (final item in rawItems) {
+              if (item is Map) {
+                itemsList.add({
+                  'dish_id': (item['dish_id'] ?? item['dishId'])?.toString() ?? '',
+                  'quantity': ParseUtils.toInt(item['quantity'], 1),
+                });
+              }
+            }
+          }
+          final locText = (rawPayload['location_text'] ?? rawPayload['locationText'])?.toString().trim();
+          cleanPayload = {
+            'customer_name': (rawPayload['customer_name'] ?? rawPayload['customerName'])?.toString() ?? '',
+            if (locText != null && locText.isNotEmpty) 'location_text': locText,
+            'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
+            'items': itemsList,
+          };
+        } else if (entityType == 'expense') {
+          cleanPayload = {
+            'description': (rawPayload['description'] ?? '').toString(),
+            'amount': ParseUtils.toDouble(rawPayload['amount']),
+            'category_id': (rawPayload['category_id'] ?? rawPayload['categoryId'])?.toString() ?? '',
+            'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
+            'expense_date': (rawPayload['expense_date'] ?? rawPayload['expenseDate'])?.toString() ?? '',
+          };
+        } else {
+          cleanPayload = Map<String, dynamic>.from(rawPayload);
+          cleanPayload.remove('created_at');
+          cleanPayload.remove('updated_at');
+          cleanPayload.remove('deleted_at');
+          cleanPayload.remove('sync_status');
+          cleanPayload.remove('version');
+          cleanPayload.remove('createdAt');
+          cleanPayload.remove('updatedAt');
+          cleanPayload.remove('deletedAt');
+          cleanPayload.remove('syncStatus');
+        }
       }
 
       // Convertir client_timestamp a ISO-8601 UTC estricto con sufijo 'Z'
@@ -154,12 +212,12 @@ class SyncEngine {
 
       return {
         'operation_id': op.operationId,
-        'entity_type': op.entityType.toLowerCase(),
+        'entity_type': entityType,
         'entity_id': op.entityId,
         'operation': op.operation.toUpperCase(),
         'payload': cleanPayload,
         'client_timestamp': clientTimestampIso,
-        if (op.baseVersion != null) 'base_version': op.baseVersion!.toInt(),
+        if (op.baseVersion != null) 'base_version': ParseUtils.toInt(op.baseVersion),
       };
     }).toList();
 
@@ -175,7 +233,7 @@ class SyncEngine {
       for (final res in results) {
         final opId = res['operation_id'] as String;
         final status = res['status'] as String;
-        final serverVersion = res['server_version'] as int?;
+        final serverVersion = ParseUtils.toInt(res['server_version'], 1);
         final errorMessage = res['error_message'] as String?;
 
         final matchingOp = pendingOps.cast<SyncQueueTableData?>().firstWhere(
@@ -187,13 +245,13 @@ class SyncEngine {
           processedCount++;
           await _queueManager.markOperationStatus(opId, 'SYNCED');
           if (matchingOp != null) {
-            await _updateLocalEntityStatus(matchingOp.entityType, matchingOp.entityId, serverVersion ?? 1, 'SYNCED');
+            await _updateLocalEntityStatus(matchingOp.entityType, matchingOp.entityId, serverVersion, 'SYNCED');
           }
         } else if (status == 'CONFLICT') {
           conflictCount++;
           await _queueManager.markOperationStatus(opId, 'CONFLICT', error: errorMessage);
           if (matchingOp != null) {
-            await _updateLocalEntityStatus(matchingOp.entityType, matchingOp.entityId, serverVersion ?? 1, 'CONFLICT');
+            await _updateLocalEntityStatus(matchingOp.entityType, matchingOp.entityId, serverVersion, 'CONFLICT');
           }
         } else {
           failedCount++;
@@ -250,7 +308,7 @@ class SyncEngine {
 
       final data = response.data['data'] ?? response.data;
       final changes = (data['changes'] as List? ?? []);
-      final nextCursor = (data['next_cursor'] as num?)?.toInt() ?? currentCursor;
+      final nextCursor = ParseUtils.toInt(data['next_cursor'], currentCursor);
       hasMore = (data['has_more'] as bool?) ?? false;
 
       for (final change in changes) {
@@ -270,7 +328,7 @@ class SyncEngine {
   Future<int> _getLastCursor() async {
     final entry = await (_db.select(_db.syncMetadataTable)..where((t) => t.key.equals(AppConstants.syncKeyLastCursor))).getSingleOrNull();
     if (entry == null) return 0;
-    return int.tryParse(entry.value) ?? 0;
+    return ParseUtils.toInt(entry.value, 0);
   }
 
   Future<void> _saveLastCursor(int cursor) async {
@@ -319,7 +377,7 @@ class SyncEngine {
     final entityId = change['entity_id'] as String;
     final operation = change['operation'] as String;
     final snapshot = change['data'] as Map<String, dynamic>? ?? {};
-    final version = (change['version'] as num?)?.toInt() ?? 1;
+    final version = ParseUtils.toInt(change['version'], 1);
     final now = DateTime.now().toUtc();
 
     switch (entityType) {
@@ -334,7 +392,7 @@ class SyncEngine {
                   id: entityId,
                   name: snapshot['name'] ?? '',
                   description: Value(snapshot['description']),
-                  price: (snapshot['price'] as num?)?.toDouble() ?? 0.0,
+                  price: ParseUtils.toDouble(snapshot['price']),
                   imageUrl: Value(snapshot['imageUrl'] ?? snapshot['image_url']),
                   active: Value(snapshot['active'] ?? true),
                   version: Value(version),
@@ -376,7 +434,7 @@ class SyncEngine {
                 ExpensesTableCompanion.insert(
                   id: entityId,
                   description: snapshot['description'] ?? '',
-                  amount: (snapshot['amount'] as num?)?.toDouble() ?? 0.0,
+                  amount: ParseUtils.toDouble(snapshot['amount']),
                   categoryId: snapshot['categoryId'] ?? snapshot['category_id'] ?? '',
                   paymentMethod: snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? 'CASH',
                   expenseDate: snapshot['expenseDate'] ?? snapshot['expense_date'] ?? '',
@@ -395,10 +453,10 @@ class SyncEngine {
         await _db.into(_db.ordersTable).insertOnConflictUpdate(
               OrdersTableCompanion.insert(
                 id: entityId,
-                orderNumber: Value(orderNumber),
+                orderNumber: Value(orderNumber?.toString()),
                 customerName: snapshot['customerName'] ?? snapshot['customer_name'] ?? '',
                 locationText: Value(snapshot['locationText'] ?? snapshot['location_text']),
-                total: (snapshot['total'] as num?)?.toDouble() ?? 0.0,
+                total: ParseUtils.toDouble(snapshot['total']),
                 paymentMethod: snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? 'CASH',
                 status: snapshot['status'] ?? 'PENDING',
                 orderedAt: DateTime.tryParse(snapshot['orderedAt'] ?? snapshot['ordered_at'] ?? '') ?? now,
@@ -415,15 +473,19 @@ class SyncEngine {
           await (_db.delete(_db.orderItemsTable)..where((t) => t.orderId.equals(entityId))).go();
           for (final item in items) {
             final itemId = item['id'] as String? ?? '${entityId}_${item['dishId'] ?? item['dish_id']}';
+            final qty = ParseUtils.toInt(item['quantity'], 1);
+            final unitPrice = ParseUtils.toDouble(item['unitPrice'] ?? item['unit_price']);
+            final subtotal = ParseUtils.toDouble(item['subtotal'], qty * unitPrice);
+
             await _db.into(_db.orderItemsTable).insert(
                   OrderItemsTableCompanion.insert(
                     id: itemId,
                     orderId: entityId,
                     dishId: item['dishId'] ?? item['dish_id'] ?? '',
                     dishNameSnapshot: item['dishNameSnapshot'] ?? item['dish_name_snapshot'] ?? item['dish']?['name'] ?? '',
-                    quantity: (item['quantity'] as num?)?.toInt() ?? 1,
-                    unitPrice: (item['unitPrice'] as num?)?.toDouble() ?? (item['unit_price'] as num?)?.toDouble() ?? 0.0,
-                    subtotal: (item['subtotal'] as num?)?.toDouble() ?? 0.0,
+                    quantity: qty,
+                    unitPrice: unitPrice,
+                    subtotal: subtotal,
                   ),
                 );
           }
@@ -448,14 +510,16 @@ class SyncEngine {
         if (dishes.isNotEmpty) {
           await (_db.delete(_db.dailyMenuDishesTable)..where((t) => t.dailyMenuId.equals(entityId))).go();
           for (final d in dishes) {
-            final dishId = d['id'] as String? ?? d as String;
-            await _db.into(_db.dailyMenuDishesTable).insert(
-                  DailyMenuDishesTableCompanion.insert(
-                    id: '${entityId}_$dishId',
-                    dailyMenuId: entityId,
-                    dishId: dishId,
-                  ),
-                );
+            final dishId = d is Map ? (d['id'] ?? d['dish_id'] ?? '').toString() : d.toString();
+            if (dishId.isNotEmpty) {
+              await _db.into(_db.dailyMenuDishesTable).insert(
+                    DailyMenuDishesTableCompanion.insert(
+                      id: '${entityId}_$dishId',
+                      dailyMenuId: entityId,
+                      dishId: dishId,
+                    ),
+                  );
+            }
           }
         }
         break;

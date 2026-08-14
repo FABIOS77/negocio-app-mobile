@@ -1,3 +1,4 @@
+import '../../../core/utils/parse_utils.dart';
 import '../../dishes/domain/dish_model.dart';
 
 class DailyMenuModel {
@@ -40,7 +41,7 @@ class DailyMenuModel {
       id: json['id'] as String,
       menuDate: (json['menuDate'] ?? json['menu_date']) as String,
       active: json['active'] as bool? ?? true,
-      version: (json['version'] as num?)?.toInt() ?? 1,
+      version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
       dishes: dishesList,
       createdAt: DateTime.tryParse(json['createdAt'] ?? json['created_at'] ?? '') ?? DateTime.now().toUtc(),

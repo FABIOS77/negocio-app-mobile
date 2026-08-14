@@ -1,3 +1,4 @@
+import '../../../core/utils/parse_utils.dart';
 import 'order_item_model.dart';
 
 class OrderModel {
@@ -39,15 +40,15 @@ class OrderModel {
 
     return OrderModel(
       id: json['id'] as String,
-      orderNumber: (json['orderNumber'] ?? json['order_number']) as String?,
+      orderNumber: (json['orderNumber'] ?? json['order_number'])?.toString(),
       customerName: (json['customerName'] ?? json['customer_name']) as String? ?? 'Cliente',
       locationText: (json['locationText'] ?? json['location_text']) as String?,
-      total: (json['total'] as num?)?.toDouble() ?? 0.0,
+      total: ParseUtils.toDouble(json['total']),
       paymentMethod: (json['paymentMethod'] ?? json['payment_method']) as String? ?? 'CASH',
       status: json['status'] as String? ?? 'PENDING',
       orderedAt: DateTime.tryParse(json['orderedAt'] ?? json['ordered_at'] ?? '') ?? DateTime.now().toUtc(),
       createdBy: (json['createdBy'] ?? json['created_by']) as String? ?? 'local-user',
-      version: (json['version'] as num?)?.toInt() ?? 1,
+      version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
       items: itemsList,
       createdAt: DateTime.tryParse(json['createdAt'] ?? json['created_at'] ?? '') ?? DateTime.now().toUtc(),

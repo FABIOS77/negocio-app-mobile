@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class ExpenseCategoryModel {
   final String id;
   final String name;
@@ -20,7 +22,7 @@ class ExpenseCategoryModel {
       id: json['id'] as String,
       name: json['name'] as String,
       active: json['active'] as bool? ?? true,
-      version: (json['version'] as num?)?.toInt() ?? 1,
+      version: ParseUtils.toInt(json['version'], 1),
       createdAt: DateTime.tryParse(json['createdAt'] ?? json['created_at'] ?? '') ?? DateTime.now().toUtc(),
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? json['updated_at'] ?? '') ?? DateTime.now().toUtc(),
     );

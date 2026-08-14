@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class ExpenseModel {
   final String id;
   final String description;
@@ -33,13 +35,13 @@ class ExpenseModel {
     return ExpenseModel(
       id: json['id'] as String,
       description: json['description'] as String? ?? '',
-      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      amount: ParseUtils.toDouble(json['amount']),
       categoryId: (json['categoryId'] ?? json['category_id']) as String? ?? '',
       categoryName: (json['categoryName'] ?? json['category_name'] ?? json['category']?['name']) as String?,
       paymentMethod: (json['paymentMethod'] ?? json['payment_method']) as String? ?? 'CASH',
       expenseDate: (json['expenseDate'] ?? json['expense_date']) as String? ?? '',
       createdBy: (json['createdBy'] ?? json['created_by']) as String? ?? 'local-user',
-      version: (json['version'] as num?)?.toInt() ?? 1,
+      version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'] as String)

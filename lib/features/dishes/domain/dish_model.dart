@@ -1,3 +1,5 @@
+import '../../../core/utils/parse_utils.dart';
+
 class DishModel {
   final String id;
   final String name;
@@ -35,10 +37,10 @@ class DishModel {
       id: json['id'] as String,
       name: json['name'] as String,
       description: cleanDescription,
-      price: (json['price'] as num).toDouble(),
+      price: ParseUtils.toDouble(json['price']),
       imageUrl: cleanImageUrl,
       active: json['active'] as bool? ?? true,
-      version: (json['version'] as num?)?.toInt() ?? 1,
+      version: ParseUtils.toInt(json['version'], 1),
       syncStatus: json['syncStatus'] as String? ?? 'SYNCED',
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'] as String)

@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:katering_grecia_app/core/database/app_database.dart';
+import 'package:katering_grecia_app/core/utils/timezone_utils.dart';
 import 'package:katering_grecia_app/features/financial_metrics/data/financial_metrics_repository.dart';
 
 void main() {
@@ -19,7 +20,7 @@ void main() {
   group('Financial Performance Tests (5,000 Orders + 2,000 Expenses)', () {
     test('Handles 5,000 orders & 2,000 expenses metrics calculation sub-50ms', () async {
       final now = DateTime.now().toUtc();
-      final todayStr = '2026-08-13';
+      final todayStr = TimezoneUtils.getTodayBusinessDate();
 
       // 1. Inserción masiva de 5,000 pedidos
       await db.batch((batch) {
