@@ -30,11 +30,15 @@ class DailyMenuRepository {
     return watchMenuByDate(todayDate);
   }
 
-  /// Observa un menú diario por fecha YYYY-MM-DD
+  /// Observa un menú diario por fecha YYYY-MM-DD (Tolerante a duplicados usando .watch())
   Stream<DailyMenuModel?> watchMenuByDate(String menuDate) {
-    final query = _db.select(_db.dailyMenusTable)..where((t) => t.menuDate.equals(menuDate));
-    return query.watchSingleOrNull().asyncMap((menuRow) async {
-      if (menuRow == null) return null;
+    final query = _db.select(_db.dailyMenusTable)
+      ..where((t) => t.menuDate.equals(menuDate))
+      ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]);
+
+    return query.watch().asyncMap((rows) async {
+      if (rows.isEmpty) return null;
+      final menuRow = rows.first;
       final dishes = await _getDishesForMenu(menuRow.id);
       return DailyMenuModel(
         id: menuRow.id,

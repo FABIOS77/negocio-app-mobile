@@ -21,17 +21,21 @@ class CreateMenuDialog extends StatefulWidget {
 
 class _CreateMenuDialogState extends State<CreateMenuDialog> {
   late TextEditingController _dateController;
+  late TextEditingController _searchController;
   final Set<String> _selectedDishIds = {};
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _dateController = TextEditingController(text: widget.initialDate);
+    _searchController = TextEditingController();
   }
 
   @override
   void dispose() {
     _dateController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -50,6 +54,10 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
   @override
   Widget build(BuildContext context) {
     final activeDishes = widget.availableDishes.where((d) => d.active).toList();
+    final filteredDishes = activeDishes.where((dish) {
+      if (_searchQuery.isEmpty) return true;
+      return dish.name.toLowerCase().contains(_searchQuery);
+    }).toList();
 
     return AlertDialog(
       title: Row(
@@ -82,13 +90,56 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
                   prefixIcon: Icon(Icons.calendar_today),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text('Seleccionar Platos para el Menú:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Buscar plato...',
+                  hintText: 'Ej. Sopa, Pique...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            setState(() {
+                              _searchController.clear();
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    _searchQuery = val.trim().toLowerCase();
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Seleccionar Platos:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    '${_selectedDishIds.length} seleccionados',
+                    style: const TextStyle(fontSize: 12, color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               if (activeDishes.isEmpty)
                 const Text('No hay platos activos guardados en SQLite.', style: TextStyle(color: Colors.grey))
+              else if (filteredDishes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                  child: Center(
+                    child: Text('No se encontraron platos con esa búsqueda', style: TextStyle(color: Colors.grey)),
+                  ),
+                )
               else
-                ...activeDishes.map((dish) {
+                ...filteredDishes.map((dish) {
                   final isSelected = _selectedDishIds.contains(dish.id);
                   return CheckboxListTile(
                     title: Text(dish.name, style: const TextStyle(fontWeight: FontWeight.bold)),
