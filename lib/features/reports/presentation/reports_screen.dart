@@ -26,10 +26,12 @@ class ReportsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         Icon(Icons.assessment, color: Colors.deepOrange, size: 28),
-                        SizedBox(width: 8),
                         Text('Exportación de Reportes Financieros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),

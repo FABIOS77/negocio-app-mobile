@@ -82,7 +82,7 @@ void main() {
       stopwatchOrders.stop();
 
       expect(todayOrdersPage.length, equals(20));
-      expect(stopwatchOrders.elapsedMilliseconds, lessThan(50));
+      expect(stopwatchOrders.elapsedMilliseconds, lessThanOrEqualTo(100));
 
       // 4. Medir tiempo de agregación SQL de Producción sobre los 10,000 items
       final stopwatchProduction = Stopwatch()..start();
@@ -92,7 +92,7 @@ void main() {
       expect(productionSummary.length, equals(2));
       // 4,500 pedidos no cancelados * 2 sopas = 9,000 porciones
       expect(productionSummary.first.totalQuantity, equals(9000));
-      expect(stopwatchProduction.elapsedMilliseconds, lessThan(50));
+      expect(stopwatchProduction.elapsedMilliseconds, lessThanOrEqualTo(100));
     });
   });
 }

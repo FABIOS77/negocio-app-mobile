@@ -20,35 +20,49 @@ class FinancialSummaryCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 10.0,
+              spacing: 12.0,
               children: [
                 const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.account_balance_wallet, color: Colors.deepOrange, size: 28),
                     SizedBox(width: 8),
                     Text('Resumen Financiero', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
                 ),
-                SegmentedButton<FinancialPeriod>(
-                  segments: const [
-                    ButtonSegment(value: FinancialPeriod.today, label: Text('Hoy')),
-                    ButtonSegment(value: FinancialPeriod.week, label: Text('Semana')),
-                    ButtonSegment(value: FinancialPeriod.month, label: Text('Mes')),
-                  ],
-                  selected: {selectedPeriod},
-                  onSelectionChanged: (val) {
-                    ref.read(selectedFinancialPeriodProvider.notifier).state = val.first;
-                  },
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<FinancialPeriod>(
+                    segments: const [
+                      ButtonSegment(value: FinancialPeriod.today, label: Text('Hoy')),
+                      ButtonSegment(value: FinancialPeriod.week, label: Text('Semana')),
+                      ButtonSegment(value: FinancialPeriod.month, label: Text('Mes')),
+                    ],
+                    selected: {selectedPeriod},
+                    onSelectionChanged: (val) {
+                      ref.read(selectedFinancialPeriodProvider.notifier).state = val.first;
+                    },
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             metricsAsync.when(
+              skipLoadingOnReload: true,
+              skipLoadingOnRefresh: true,
               data: (m) {
                 final isPositive = m.netResult >= 0;
                 return Column(
                   children: [
+                    if (metricsAsync.isRefreshing || metricsAsync.isReloading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8.0),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
@@ -69,7 +83,10 @@ class FinancialSummaryCard extends ConsumerWidget {
                   ],
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              ),
               error: (err, _) => Text('Error al cargar métricas: $err'),
             ),
           ],

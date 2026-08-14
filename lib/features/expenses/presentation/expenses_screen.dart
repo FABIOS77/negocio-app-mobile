@@ -66,16 +66,23 @@ class ExpensesScreen extends ConsumerWidget {
                   children: [
                     const Text('Filtros de Gastos:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      runSpacing: 10.0,
+                      spacing: 8.0,
                       children: [
-                        Expanded(
+                        SizedBox(
+                          width: 170,
                           child: DropdownButtonFormField<String?>(
                             initialValue: selectedCategory,
-                            decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(
+                              labelText: 'Categoría',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
                             items: [
                               const DropdownMenuItem(value: null, child: Text('Todas')),
                               ...(categoriesAsync.asData?.value ?? []).map(
-                                (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                                (c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)),
                               ),
                             ],
                             onChanged: (val) {
@@ -83,11 +90,15 @@ class ExpensesScreen extends ConsumerWidget {
                             },
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
+                        SizedBox(
+                          width: 150,
                           child: DropdownButtonFormField<String?>(
                             initialValue: selectedPayment,
-                            decoration: const InputDecoration(labelText: 'Pago', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(
+                              labelText: 'Pago',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
                             items: const [
                               DropdownMenuItem(value: null, child: Text('Todos')),
                               DropdownMenuItem(value: 'CASH', child: Text('Efectivo')),
@@ -109,6 +120,8 @@ class ExpensesScreen extends ConsumerWidget {
             const Text('Historial de Gastos:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             expensesAsync.when(
+              skipLoadingOnReload: true,
+              skipLoadingOnRefresh: true,
               data: (expenses) {
                 if (expenses.isEmpty) {
                   return const Card(
@@ -122,58 +135,67 @@ class ExpensesScreen extends ConsumerWidget {
                     ),
                   );
                 }
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: expenses.length,
-                  itemBuilder: (context, index) {
-                    final expense = expenses[index];
-                    return ExpenseTile(
-                      expense: expense,
-                      onTap: () {
-                        final categories = categoriesAsync.asData?.value ?? [];
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => ExpenseDetailDialog(
-                            expense: expense,
-                            categories: categories,
-                            onSave: (description, amount, categoryId, paymentMethod, expenseDate) async {
-                              await repository.updateExpense(
-                                id: expense.id,
-                                description: description,
-                                amount: amount,
-                                categoryId: categoryId,
-                                paymentMethod: paymentMethod,
-                                expenseDate: expenseDate,
-                              );
+                return Column(
+                  children: [
+                    if (expensesAsync.isRefreshing || expensesAsync.isReloading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8.0),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: expenses.length,
+                      itemBuilder: (context, index) {
+                        final expense = expenses[index];
+                        return ExpenseTile(
+                          expense: expense,
+                          onTap: () {
+                            final categories = categoriesAsync.asData?.value ?? [];
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => ExpenseDetailDialog(
+                                expense: expense,
+                                categories: categories,
+                                onSave: (description, amount, categoryId, paymentMethod, expenseDate) async {
+                                  await repository.updateExpense(
+                                    id: expense.id,
+                                    description: description,
+                                    amount: amount,
+                                    categoryId: categoryId,
+                                    paymentMethod: paymentMethod,
+                                    expenseDate: expenseDate,
+                                  );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Gasto actualizado')),
+                                    );
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                          onDelete: () async {
+                            final confirm = await ConfirmDialog.show(
+                              context,
+                              title: 'Eliminar Gasto',
+                              content: '¿Desea eliminar el gasto "${expense.description}" por ${CurrencyFormatter.formatBOB(expense.amount)}?',
+                              confirmLabel: 'SÍ, ELIMINAR',
+                              confirmColor: Colors.red,
+                            );
+                            if (confirm) {
+                              await repository.deleteExpense(expense.id);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Gasto actualizado')),
+                                  const SnackBar(content: Text('Gasto eliminado')),
                                 );
                               }
-                            },
-                          ),
+                            }
+                          },
                         );
                       },
-                      onDelete: () async {
-                        final confirm = await ConfirmDialog.show(
-                          context,
-                          title: 'Eliminar Gasto',
-                          content: '¿Desea eliminar el gasto "${expense.description}" por ${CurrencyFormatter.formatBOB(expense.amount)}?',
-                          confirmLabel: 'SÍ, ELIMINAR',
-                          confirmColor: Colors.red,
-                        );
-                        if (confirm) {
-                          await repository.deleteExpense(expense.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Gasto eliminado')),
-                            );
-                          }
-                        }
-                      },
-                    );
-                  },
+                    ),
+                  ],
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
