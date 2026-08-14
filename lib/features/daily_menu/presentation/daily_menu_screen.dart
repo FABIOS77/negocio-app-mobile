@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/timezone_utils.dart';
 import '../../dishes/application/dishes_notifier.dart';
+import '../../dishes/presentation/widgets/dish_image_avatar.dart';
 import '../application/daily_menu_notifier.dart';
 import 'create_menu_dialog.dart';
 
@@ -114,10 +115,7 @@ class DailyMenuScreen extends ConsumerWidget {
                         elevation: 2,
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Colors.deepOrange,
-                            child: Icon(Icons.restaurant, color: Colors.white),
-                          ),
+                          leading: DishImageAvatar(dish: dish),
                           title: Text(dish.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           subtitle: Text(dish.description ?? 'Plato del día', maxLines: 1, overflow: TextOverflow.ellipsis),
                           trailing: Text(

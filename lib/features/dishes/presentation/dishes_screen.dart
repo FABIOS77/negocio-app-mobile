@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../application/dishes_notifier.dart';
 import 'dish_detail_dialog.dart';
+import 'widgets/dish_image_avatar.dart';
 
 class DishesScreen extends ConsumerWidget {
   const DishesScreen({super.key});
@@ -111,13 +112,7 @@ class DishesScreen extends ConsumerWidget {
                               ),
                             );
                           },
-                          leading: CircleAvatar(
-                            backgroundColor: dish.active ? Colors.deepOrange.shade100 : Colors.grey.shade300,
-                            child: Icon(
-                              dish.active ? Icons.restaurant : Icons.block,
-                              color: dish.active ? Colors.deepOrange : Colors.grey,
-                            ),
-                          ),
+                          leading: DishImageAvatar(dish: dish),
                           title: Row(
                             children: [
                               Expanded(
