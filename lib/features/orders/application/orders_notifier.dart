@@ -16,16 +16,30 @@ final todayOrdersStreamProvider = StreamProvider<List<OrderModel>>((ref) {
 });
 
 final orderHistoryStatusFilterProvider = StateProvider<String?>((ref) => null);
+final orderHistorySearchQueryProvider = StateProvider<String>((ref) => '');
 final orderHistoryDateFilterProvider = StateProvider<String?>((ref) => null);
+final orderHistoryDateFromProvider = StateProvider<String?>((ref) => null);
+final orderHistoryDateToProvider = StateProvider<String?>((ref) => null);
+final orderHistoryLimitProvider = StateProvider<int>((ref) => 50);
+final orderHistoryOffsetProvider = StateProvider<int>((ref) => 0);
 
 final historyOrdersStreamProvider = StreamProvider<List<OrderModel>>((ref) {
   final repository = ref.watch(ordersRepositoryProvider);
   final status = ref.watch(orderHistoryStatusFilterProvider);
+  final searchQuery = ref.watch(orderHistorySearchQueryProvider);
   final date = ref.watch(orderHistoryDateFilterProvider);
+  final dateFrom = ref.watch(orderHistoryDateFromProvider);
+  final dateTo = ref.watch(orderHistoryDateToProvider);
+  final limit = ref.watch(orderHistoryLimitProvider);
+  final offset = ref.watch(orderHistoryOffsetProvider);
 
   return repository.watchOrders(
     status: status,
+    searchQuery: searchQuery,
     date: date,
-    limit: 50,
+    dateFrom: dateFrom,
+    dateTo: dateTo,
+    limit: limit,
+    offset: offset,
   );
 });

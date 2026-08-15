@@ -29,26 +29,49 @@ class OrdersRepository {
     return watchOrders(date: todayDate, excludeCancelled: true, limit: 100);
   }
 
-  /// Observa pedidos con filtros de fecha, estado e índices de Drift paginados
+  /// Observa pedidos con filtros de fecha (desde/hasta en America/La_Paz), estado, búsqueda de texto paginados
   Stream<List<OrderModel>> watchOrders({
     String? status,
     String? date,
+    String? dateFrom,
+    String? dateTo,
+    String? searchQuery,
     bool excludeCancelled = false,
-    int limit = 20,
+    int limit = 50,
     int offset = 0,
   }) {
     final query = _db.select(_db.ordersTable);
 
+    // 1. Filtro de estado
     if (status != null && status.isNotEmpty) {
       query.where((t) => t.status.equals(status));
     } else if (excludeCancelled) {
       query.where((t) => t.status.isNotValue('CANCELLED'));
     }
 
+    // 2. Filtro de fechas en America/La_Paz (UTC-4: el inicio del día es a las 04:00:00Z)
     if (date != null && date.isNotEmpty) {
       final dateStart = DateTime.parse('${date}T00:00:00.000Z').add(const Duration(hours: 4));
       final dateEnd = dateStart.add(const Duration(days: 1));
       query.where((t) => t.orderedAt.isBiggerOrEqualValue(dateStart) & t.orderedAt.isSmallerThanValue(dateEnd));
+    } else {
+      if (dateFrom != null && dateFrom.isNotEmpty) {
+        final dateStart = DateTime.parse('${dateFrom}T00:00:00.000Z').add(const Duration(hours: 4));
+        query.where((t) => t.orderedAt.isBiggerOrEqualValue(dateStart));
+      }
+      if (dateTo != null && dateTo.isNotEmpty) {
+        final dateEnd = DateTime.parse('${dateTo}T00:00:00.000Z').add(const Duration(hours: 4 + 24));
+        query.where((t) => t.orderedAt.isSmallerThanValue(dateEnd));
+      }
+    }
+
+    // 3. Búsqueda por texto (customer_name, location_text, order_number)
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final term = '%${searchQuery.trim().toLowerCase()}%';
+      query.where((t) =>
+          t.customerName.lower().like(term) |
+          t.locationText.lower().like(term) |
+          t.orderNumber.cast<String>().like(term));
     }
 
     query.orderBy([(t) => OrderingTerm(expression: t.orderedAt, mode: OrderingMode.desc)]);
