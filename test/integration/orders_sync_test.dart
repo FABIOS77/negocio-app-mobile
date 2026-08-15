@@ -202,5 +202,62 @@ void main() {
       final pendingOps = await queueManager.getPendingOperations();
       expect(pendingOps.isEmpty, isTrue);
     });
+
+    test('changeOrderStatus pushes status-only payload without customer_name or items to prevent data loss', () async {
+      // 1. Crear un pedido local
+      final dish = await dishesRepo.createDish(name: 'Almuerzo Completo', price: 25.0);
+      final localOrder = await ordersRepo.createOrder(
+        customerName: 'Cliente Mesa 5',
+        locationText: 'Terraza',
+        paymentMethod: 'QR',
+        itemsInput: [(dishId: dish.id, quantity: 2)],
+      );
+
+      // Limpiar la cola de sync de la creación
+      await db.delete(db.syncQueueTable).go();
+
+      // 2. Cambiar estado a DELIVERED
+      await ordersRepo.changeOrderStatus(localOrder.id, 'DELIVERED');
+
+      // 3. Capturar el payload enviado en POST /sync/push
+      Map<String, dynamic>? capturedData;
+      when(() => mockDio.post('/sync/push', data: any(named: 'data'))).thenAnswer((invocation) async {
+        capturedData = invocation.namedArguments[#data] as Map<String, dynamic>;
+        final operations = capturedData!['operations'] as List;
+        final op = operations.first as Map<String, dynamic>;
+        return Response(
+          requestOptions: RequestOptions(path: '/sync/push'),
+          statusCode: 200,
+          data: {
+            'success': true,
+            'data': {
+              'results': [
+                {
+                  'operation_id': op['operation_id'],
+                  'status': 'PROCESSED',
+                  'server_version': 2,
+                }
+              ]
+            }
+          },
+        );
+      });
+
+      final result = await syncEngine.push();
+      expect(result.processed, equals(1));
+      expect(capturedData, isNotNull);
+
+      final ops = capturedData!['operations'] as List;
+      expect(ops.length, equals(1));
+      final orderOp = ops.first as Map<String, dynamic>;
+      expect(orderOp['entity_type'], equals('order'));
+      expect(orderOp['operation'], equals('UPDATE'));
+
+      final payload = orderOp['payload'] as Map<String, dynamic>;
+      expect(payload['status'], equals('DELIVERED'));
+      expect(payload.containsKey('customer_name'), isFalse);
+      expect(payload.containsKey('items'), isFalse);
+    });
   });
 }
+

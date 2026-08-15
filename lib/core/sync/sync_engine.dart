@@ -167,27 +167,38 @@ class SyncEngine {
             'dish_ids': dishIds,
           };
         } else if (entityType == 'order') {
-          final rawItems = rawPayload['items'] ?? [];
-          final List<Map<String, dynamic>> itemsList = [];
-          if (rawItems is List) {
-            for (final item in rawItems) {
-              if (item is Map) {
-                itemsList.add({
-                  'dish_id': (item['dish_id'] ?? item['dishId'])?.toString() ?? '',
-                  'quantity': ParseUtils.toInt(item['quantity'], 1),
-                });
+          final hasStatus = rawPayload.containsKey('status');
+          final hasCustomer = rawPayload.containsKey('customer_name') || rawPayload.containsKey('customerName');
+          final hasItems = rawPayload.containsKey('items');
+
+          if (hasStatus && !hasCustomer && !hasItems) {
+            cleanPayload = {
+              'status': rawPayload['status']?.toString() ?? 'PENDING',
+            };
+          } else {
+            final rawItems = rawPayload['items'] ?? [];
+            final List<Map<String, dynamic>> itemsList = [];
+            if (rawItems is List) {
+              for (final item in rawItems) {
+                if (item is Map) {
+                  itemsList.add({
+                    'dish_id': (item['dish_id'] ?? item['dishId'])?.toString() ?? '',
+                    'quantity': ParseUtils.toInt(item['quantity'], 1),
+                  });
+                }
               }
             }
+            final locText = (rawPayload['location_text'] ?? rawPayload['locationText'])?.toString().trim();
+            final orderedAt = (rawPayload['ordered_at'] ?? rawPayload['orderedAt'])?.toString().trim();
+            cleanPayload = {
+              'customer_name': (rawPayload['customer_name'] ?? rawPayload['customerName'])?.toString() ?? '',
+              if (locText != null && locText.isNotEmpty) 'location_text': locText,
+              'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
+              if (orderedAt != null && orderedAt.isNotEmpty) 'ordered_at': orderedAt,
+              if (hasStatus) 'status': rawPayload['status'].toString(),
+              'items': itemsList,
+            };
           }
-          final locText = (rawPayload['location_text'] ?? rawPayload['locationText'])?.toString().trim();
-          final orderedAt = (rawPayload['ordered_at'] ?? rawPayload['orderedAt'])?.toString().trim();
-          cleanPayload = {
-            'customer_name': (rawPayload['customer_name'] ?? rawPayload['customerName'])?.toString() ?? '',
-            if (locText != null && locText.isNotEmpty) 'location_text': locText,
-            'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
-            if (orderedAt != null && orderedAt.isNotEmpty) 'ordered_at': orderedAt,
-            'items': itemsList,
-          };
         } else if (entityType == 'expense') {
           cleanPayload = {
             'description': (rawPayload['description'] ?? '').toString(),
