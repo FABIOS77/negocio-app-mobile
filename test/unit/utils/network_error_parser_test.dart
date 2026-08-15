@@ -58,6 +58,37 @@ void main() {
       expect(msg, equals('El correo ya está en uso.'));
     });
 
+    test('Extracts and formats Zod validation error details array on HTTP 400', () {
+      final dioException = DioException(
+        requestOptions: RequestOptions(path: '/test'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/test'),
+          statusCode: 400,
+          data: {
+            'error': {
+              'message': 'Validation failed',
+              'details': [
+                {
+                  'path': ['operations', 0, 'payload', 'items'],
+                  'message': 'Order must have at least one item',
+                },
+                {
+                  'path': ['operations', 0, 'payload', 'payment_method'],
+                  'message': 'Invalid payment method',
+                }
+              ]
+            }
+          },
+        ),
+      );
+
+      final msg = NetworkErrorParser.parse(dioException);
+      expect(
+        msg,
+        equals('Validation failed: operations.0.payload.items - Order must have at least one item, operations.0.payload.payment_method - Invalid payment method'),
+      );
+    });
+
     test('Extracts 401 Unauthorized friendly message', () {
       final dioException = DioException(
         requestOptions: RequestOptions(path: '/test'),

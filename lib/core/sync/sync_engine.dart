@@ -7,6 +7,7 @@ import '../config/app_constants.dart';
 import '../database/app_database.dart';
 import '../network/dio_client.dart';
 import '../network/network_info.dart';
+import '../utils/network_error_parser.dart';
 import '../utils/parse_utils.dart';
 import 'sync_queue_manager.dart';
 
@@ -179,10 +180,12 @@ class SyncEngine {
             }
           }
           final locText = (rawPayload['location_text'] ?? rawPayload['locationText'])?.toString().trim();
+          final orderedAt = (rawPayload['ordered_at'] ?? rawPayload['orderedAt'])?.toString().trim();
           cleanPayload = {
             'customer_name': (rawPayload['customer_name'] ?? rawPayload['customerName'])?.toString() ?? '',
             if (locText != null && locText.isNotEmpty) 'location_text': locText,
             'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
+            if (orderedAt != null && orderedAt.isNotEmpty) 'ordered_at': orderedAt,
             'items': itemsList,
           };
         } else if (entityType == 'expense') {
@@ -280,8 +283,8 @@ class SyncEngine {
           await _queueManager.markOperationStatus(op.operationId, 'PENDING', error: e.message);
         } else {
           // Excedió reintentos o fallo permanente HTTP 400
-          final errData = e.response?.data != null ? e.response?.data.toString() : e.message;
-          await _queueManager.markOperationStatus(op.operationId, 'FAILED', error: errData ?? 'Fallo de envío');
+          final errData = NetworkErrorParser.parse(e);
+          await _queueManager.markOperationStatus(op.operationId, 'FAILED', error: errData);
         }
       }
       return (processed: 0, conflicts: 0, failed: pendingOps.length);

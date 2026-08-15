@@ -83,23 +83,27 @@ class OrdersRepository {
 
   Future<List<OrderItemModel>> _getOrderItems(String orderId) async {
     final itemRows = await (_db.select(_db.orderItemsTable)..where((t) => t.orderId.equals(orderId))).get();
-    return itemRows.map((r) {
-      return OrderItemModel(
-        id: r.id,
-        orderId: r.orderId,
-        dishId: r.dishId,
-        dishNameSnapshot: r.dishNameSnapshot,
-        quantity: r.quantity,
-        unitPrice: r.unitPrice,
-        subtotal: r.subtotal,
-      );
-    }).toList();
+    return itemRows
+        .map(
+          (r) => OrderItemModel(
+            id: r.id,
+            orderId: r.orderId,
+            dishId: r.dishId,
+            dishNameSnapshot: r.dishNameSnapshot,
+            quantity: r.quantity,
+            unitPrice: r.unitPrice,
+            subtotal: r.subtotal,
+          ),
+        )
+        .toList();
   }
 
+  /// Obtiene un pedido completo por ID con sus items
   Future<OrderModel?> getOrderById(String id) async {
     final row = await (_db.select(_db.ordersTable)..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return null;
-    final items = await _getOrderItems(id);
+
+    final items = await _getOrderItems(row.id);
     return OrderModel(
       id: row.id,
       orderNumber: row.orderNumber,
@@ -118,6 +122,7 @@ class OrdersRepository {
     );
   }
 
+  /// Crear pedido offline (calcula total con precio congelado, guarda pedido + items atómicamente, encola CREATE y dispara sync)
   Future<OrderModel> createOrder({
     required String customerName,
     String? locationText,
@@ -135,17 +140,31 @@ class OrdersRepository {
       throw ArgumentError('El pedido debe incluir al menos un plato');
     }
 
+    final aggregatedMap = <String, int>{};
+    for (final item in itemsInput) {
+      if (item.quantity > 0) {
+        aggregatedMap[item.dishId] = (aggregatedMap[item.dishId] ?? 0) + item.quantity;
+      }
+    }
+
+    if (aggregatedMap.isEmpty) {
+      throw ArgumentError('El pedido debe incluir al menos un plato con cantidad positiva');
+    }
+
     final orderItems = <OrderItemModel>[];
     double calculatedTotal = 0.0;
 
-    for (final item in itemsInput) {
-      final dish = await (_db.select(_db.dishesTable)..where((t) => t.id.equals(item.dishId))).getSingleOrNull();
+    for (final entry in aggregatedMap.entries) {
+      final dishId = entry.key;
+      final quantity = entry.value;
+
+      final dish = await (_db.select(_db.dishesTable)..where((t) => t.id.equals(dishId))).getSingleOrNull();
       if (dish == null || !dish.active) {
         throw StateError('El plato no está disponible en el catálogo local');
       }
 
       final unitPrice = dish.price;
-      final subtotal = (unitPrice * item.quantity);
+      final subtotal = (unitPrice * quantity);
       calculatedTotal += subtotal;
 
       final itemId = _uuid.v4();
@@ -153,9 +172,9 @@ class OrdersRepository {
         OrderItemModel(
           id: itemId,
           orderId: orderId,
-          dishId: item.dishId,
+          dishId: dishId,
           dishNameSnapshot: dish.name,
-          quantity: item.quantity,
+          quantity: quantity,
           unitPrice: unitPrice,
           subtotal: subtotal,
         ),
@@ -254,20 +273,34 @@ class OrdersRepository {
       throw ArgumentError('El pedido debe incluir al menos un plato');
     }
 
+    final aggregatedMap = <String, int>{};
+    for (final item in itemsInput) {
+      if (item.quantity > 0) {
+        aggregatedMap[item.dishId] = (aggregatedMap[item.dishId] ?? 0) + item.quantity;
+      }
+    }
+
+    if (aggregatedMap.isEmpty) {
+      throw ArgumentError('El pedido debe incluir al menos un plato con cantidad positiva');
+    }
+
     final now = DateTime.now().toUtc();
     final updatedVersion = current.version + 1;
 
     final orderItems = <OrderItemModel>[];
     double calculatedTotal = 0.0;
 
-    for (final item in itemsInput) {
-      final dish = await (_db.select(_db.dishesTable)..where((t) => t.id.equals(item.dishId))).getSingleOrNull();
+    for (final entry in aggregatedMap.entries) {
+      final dishId = entry.key;
+      final quantity = entry.value;
+
+      final dish = await (_db.select(_db.dishesTable)..where((t) => t.id.equals(dishId))).getSingleOrNull();
       if (dish == null || !dish.active) {
         throw StateError('El plato no está disponible en el catálogo local');
       }
 
       final unitPrice = dish.price;
-      final subtotal = (unitPrice * item.quantity);
+      final subtotal = (unitPrice * quantity);
       calculatedTotal += subtotal;
 
       final itemId = _uuid.v4();
@@ -275,9 +308,9 @@ class OrdersRepository {
         OrderItemModel(
           id: itemId,
           orderId: id,
-          dishId: item.dishId,
+          dishId: dishId,
           dishNameSnapshot: dish.name,
-          quantity: item.quantity,
+          quantity: quantity,
           unitPrice: unitPrice,
           subtotal: subtotal,
         ),
@@ -303,13 +336,13 @@ class OrdersRepository {
             );
       }
 
-      // 3. Actualizar cabecera del pedido
+      // 3. Actualizar registro principal
       await (_db.update(_db.ordersTable)..where((t) => t.id.equals(id))).write(
         OrdersTableCompanion(
           customerName: Value(customerName.trim()),
-          locationText: Value(locationText != null && locationText.trim().isNotEmpty ? locationText.trim() : null),
-          paymentMethod: Value(paymentMethod),
+          locationText: locationText != null && locationText.trim().isNotEmpty ? Value(locationText.trim()) : const Value(null),
           total: Value(calculatedTotal),
+          paymentMethod: Value(paymentMethod),
           version: Value(updatedVersion),
           syncStatus: const Value('PENDING'),
           updatedAt: Value(now),
@@ -342,6 +375,7 @@ class OrdersRepository {
         'customer_name': updatedOrder.customerName,
         if (updatedOrder.locationText != null) 'location_text': updatedOrder.locationText,
         'payment_method': updatedOrder.paymentMethod,
+        'ordered_at': current.orderedAt.toIso8601String(),
         'items': orderItems.map((i) => {'dish_id': i.dishId, 'quantity': i.quantity}).toList(),
       },
       baseVersion: current.version,
@@ -422,7 +456,9 @@ class OrdersRepository {
       entityType: 'order',
       entityId: id,
       operation: 'UPDATE',
-      payload: {'status': newStatus},
+      payload: {
+        'status': newStatus,
+      },
       baseVersion: current.version,
     );
 

@@ -22,12 +22,42 @@ class NetworkErrorParser {
         return serverUnavailableMessage;
       }
 
-      // 3. Respuesta estructurada JSON desde backend de NestJS
+      // 3. Respuesta estructurada JSON desde backend (incluyendo detalles de Zod)
       final data = error.response?.data;
       if (data is Map) {
         final errorMap = data['error'];
-        if (errorMap is Map && errorMap['message'] != null) {
-          return errorMap['message'].toString();
+        if (errorMap is Map) {
+          final mainMessage = errorMap['message']?.toString();
+          final details = errorMap['details'];
+
+          if (details is List && details.isNotEmpty) {
+            final formattedDetails = <String>[];
+            for (final d in details) {
+              if (d is Map) {
+                final pathList = d['path'];
+                final pathStr = (pathList is List) ? pathList.join('.') : (pathList?.toString() ?? '');
+                final msg = d['message']?.toString() ?? '';
+                if (pathStr.isNotEmpty && msg.isNotEmpty) {
+                  formattedDetails.add('$pathStr - $msg');
+                } else if (msg.isNotEmpty) {
+                  formattedDetails.add(msg);
+                }
+              } else if (d is String && d.isNotEmpty) {
+                formattedDetails.add(d);
+              }
+            }
+
+            if (formattedDetails.isNotEmpty) {
+              if (mainMessage != null && mainMessage.isNotEmpty) {
+                return '$mainMessage: ${formattedDetails.join(', ')}';
+              }
+              return formattedDetails.join(', ');
+            }
+          }
+
+          if (mainMessage != null && mainMessage.isNotEmpty) {
+            return mainMessage;
+          }
         }
         if (data['message'] != null) {
           if (data['message'] is List) {
