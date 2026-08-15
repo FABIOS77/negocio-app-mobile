@@ -493,47 +493,69 @@ class SyncEngine {
             snapshot['deletedAt'] != null ||
             snapshot['status'] == 'CANCELLED';
 
-        final orderNumber = snapshot['orderNumber'] ?? snapshot['order_number'];
-        final status = isDeleted ? 'CANCELLED' : (snapshot['status'] ?? 'PENDING');
+        final existingOrder = await (_db.select(_db.ordersTable)..where((t) => t.id.equals(entityId))).getSingleOrNull();
+
+        final rawOrderNumber = snapshot['orderNumber'] ?? snapshot['order_number'];
+        final orderNumber = rawOrderNumber?.toString() ?? existingOrder?.orderNumber;
+
+        final rawCustomerName = (snapshot['customerName'] ?? snapshot['customer_name'])?.toString();
+        final customerName = (rawCustomerName != null && rawCustomerName.trim().isNotEmpty)
+            ? rawCustomerName.trim()
+            : (existingOrder?.customerName ?? '');
+
+        final rawLocation = snapshot['locationText'] ?? snapshot['location_text'];
+        final locationText = rawLocation != null ? rawLocation.toString() : existingOrder?.locationText;
+
+        final total = ParseUtils.toDouble(snapshot['total'], existingOrder?.total ?? 0.0);
+        final paymentMethod = snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? existingOrder?.paymentMethod ?? 'CASH';
+        final status = isDeleted ? 'CANCELLED' : (snapshot['status'] ?? existingOrder?.status ?? 'PENDING');
+        final orderedAt = DateTime.tryParse(snapshot['orderedAt'] ?? snapshot['ordered_at'] ?? '') ?? existingOrder?.orderedAt ?? now;
+        final createdBy = snapshot['createdBy'] ?? snapshot['created_by'] ?? existingOrder?.createdBy ?? 'local-user';
+        final createdAt = DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? existingOrder?.createdAt ?? now;
+        final updatedAt = DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now;
 
         await _db.into(_db.ordersTable).insertOnConflictUpdate(
               OrdersTableCompanion.insert(
                 id: entityId,
-                orderNumber: Value(orderNumber?.toString()),
-                customerName: snapshot['customerName'] ?? snapshot['customer_name'] ?? '',
-                locationText: Value(snapshot['locationText'] ?? snapshot['location_text']),
-                total: ParseUtils.toDouble(snapshot['total']),
-                paymentMethod: snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? 'CASH',
+                orderNumber: Value(orderNumber),
+                customerName: customerName,
+                locationText: Value(locationText),
+                total: total,
+                paymentMethod: paymentMethod,
                 status: status,
-                orderedAt: DateTime.tryParse(snapshot['orderedAt'] ?? snapshot['ordered_at'] ?? '') ?? now,
-                createdBy: snapshot['createdBy'] ?? snapshot['created_by'] ?? '',
+                orderedAt: orderedAt,
+                createdBy: createdBy,
                 version: Value(version),
                 syncStatus: const Value('SYNCED'),
-                createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
-                updatedAt: DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
               ),
             );
 
-        final items = (snapshot['items'] as List? ?? []);
-        if (items.isNotEmpty) {
+        // Protección de items relacionales contra snapshots parciales (ej. mutación de solo estado):
+        // Solo sobrescribir/reemplazar order_items si el snapshot incluye explícitamente una lista no vacía de items.
+        final rawItems = snapshot['items'];
+        if (rawItems is List && rawItems.isNotEmpty) {
           await (_db.delete(_db.orderItemsTable)..where((t) => t.orderId.equals(entityId))).go();
-          for (final item in items) {
-            final itemId = item['id'] as String? ?? '${entityId}_${item['dishId'] ?? item['dish_id']}';
-            final qty = ParseUtils.toInt(item['quantity'], 1);
-            final unitPrice = ParseUtils.toDouble(item['unitPrice'] ?? item['unit_price']);
-            final subtotal = ParseUtils.toDouble(item['subtotal'], qty * unitPrice);
+          for (final item in rawItems) {
+            if (item is Map) {
+              final itemId = item['id'] as String? ?? '${entityId}_${item['dishId'] ?? item['dish_id']}';
+              final qty = ParseUtils.toInt(item['quantity'], 1);
+              final unitPrice = ParseUtils.toDouble(item['unitPrice'] ?? item['unit_price']);
+              final subtotal = ParseUtils.toDouble(item['subtotal'], qty * unitPrice);
 
-            await _db.into(_db.orderItemsTable).insert(
-                  OrderItemsTableCompanion.insert(
-                    id: itemId,
-                    orderId: entityId,
-                    dishId: item['dishId'] ?? item['dish_id'] ?? '',
-                    dishNameSnapshot: item['dishNameSnapshot'] ?? item['dish_name_snapshot'] ?? item['dish']?['name'] ?? '',
-                    quantity: qty,
-                    unitPrice: unitPrice,
-                    subtotal: subtotal,
-                  ),
-                );
+              await _db.into(_db.orderItemsTable).insert(
+                    OrderItemsTableCompanion.insert(
+                      id: itemId,
+                      orderId: entityId,
+                      dishId: item['dishId'] ?? item['dish_id'] ?? '',
+                      dishNameSnapshot: item['dishNameSnapshot'] ?? item['dish_name_snapshot'] ?? item['dish']?['name'] ?? '',
+                      quantity: qty,
+                      unitPrice: unitPrice,
+                      subtotal: subtotal,
+                    ),
+                  );
+            }
           }
         }
         break;
@@ -545,7 +567,9 @@ class SyncEngine {
             snapshot['deletedAt'] != null ||
             snapshot['active'] == false;
 
-        final menuDate = snapshot['menuDate'] ?? snapshot['menu_date'] ?? '';
+        final existingMenu = await (_db.select(_db.dailyMenusTable)..where((t) => t.id.equals(entityId))).getSingleOrNull();
+        final menuDate = (snapshot['menuDate'] ?? snapshot['menu_date'])?.toString() ?? existingMenu?.menuDate ?? '';
+
         await _db.into(_db.dailyMenusTable).insertOnConflictUpdate(
               DailyMenusTableCompanion.insert(
                 id: entityId,
@@ -553,15 +577,15 @@ class SyncEngine {
                 active: Value(!isDeleted),
                 version: Value(version),
                 syncStatus: const Value('SYNCED'),
-                createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
+                createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? existingMenu?.createdAt ?? now,
                 updatedAt: DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now,
               ),
             );
 
-        final dishes = (snapshot['dishes'] as List? ?? []);
-        if (dishes.isNotEmpty) {
+        final rawDishes = snapshot['dishes'] ?? snapshot['dish_ids'];
+        if (rawDishes is List && rawDishes.isNotEmpty) {
           await (_db.delete(_db.dailyMenuDishesTable)..where((t) => t.dailyMenuId.equals(entityId))).go();
-          for (final d in dishes) {
+          for (final d in rawDishes) {
             final dishId = d is Map ? (d['id'] ?? d['dish_id'] ?? '').toString() : d.toString();
             if (dishId.isNotEmpty) {
               await _db.into(_db.dailyMenuDishesTable).insert(

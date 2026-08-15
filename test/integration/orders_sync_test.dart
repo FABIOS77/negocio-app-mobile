@@ -258,6 +258,66 @@ void main() {
       expect(payload.containsKey('customer_name'), isFalse);
       expect(payload.containsKey('items'), isFalse);
     });
+
+    test('Pull partial snapshot (without items key) preserves existing local order_items and customer_name', () async {
+      // 1. Crear un pedido local completo con sus items
+      final dish = await dishesRepo.createDish(name: 'Pastel de Papa', price: 30.0);
+      final localOrder = await ordersRepo.createOrder(
+        customerName: 'Cliente Juan Perez',
+        locationText: 'Mesa 4',
+        paymentMethod: 'CASH',
+        itemsInput: [(dishId: dish.id, quantity: 3)],
+      );
+
+      expect(localOrder.items.length, equals(1));
+      expect(localOrder.items.first.subtotal, equals(90.0));
+
+      // 2. Simular respuesta PULL con un snapshot parcial (solo id, status, version - sin items)
+      when(() => mockDio.get('/sync/pull', queryParameters: any(named: 'queryParameters'))).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: '/sync/pull'),
+          statusCode: 200,
+          data: {
+            'success': true,
+            'data': {
+              'changes': [
+                {
+                  'server_change_id': 600,
+                  'entity_type': 'order',
+                  'entity_id': localOrder.id,
+                  'operation': 'UPDATE',
+                  'data': {
+                    'id': localOrder.id,
+                    'status': 'DELIVERED',
+                    // Note: items is completely omitted (partial snapshot)
+                  },
+                  'version': 3,
+                }
+              ],
+              'next_cursor': 600,
+              'has_more': false,
+            }
+          },
+        ),
+      );
+
+      final count = await syncEngine.pull();
+      expect(count, equals(1));
+
+      // 3. Verificar que el pedido actualizado conserva el customer_name y los items originales
+      final updatedOrder = await ordersRepo.getOrderById(localOrder.id);
+      expect(updatedOrder, isNotNull);
+      expect(updatedOrder!.status, equals('DELIVERED'));
+      expect(updatedOrder.customerName, equals('Cliente Juan Perez'));
+      expect(updatedOrder.locationText, equals('Mesa 4'));
+      expect(updatedOrder.total, equals(90.0));
+      expect(updatedOrder.version, equals(3));
+      expect(updatedOrder.items.length, equals(1));
+      expect(updatedOrder.items.first.dishNameSnapshot, equals('Pastel de Papa'));
+      expect(updatedOrder.items.first.quantity, equals(3));
+      expect(updatedOrder.items.first.subtotal, equals(90.0));
+    });
   });
 }
+
 
