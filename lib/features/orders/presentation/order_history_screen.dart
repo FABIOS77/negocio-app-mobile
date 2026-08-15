@@ -22,18 +22,22 @@ class OrderHistoryScreen extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Text('Filtrar Estado: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                DropdownButton<String?>(
-                  value: statusFilter,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos los Estados')),
-                    DropdownMenuItem(value: 'PENDING', child: Text('Pendientes')),
-                    DropdownMenuItem(value: 'DELIVERED', child: Text('Entregados')),
-                    DropdownMenuItem(value: 'CANCELLED', child: Text('Eliminados / Cancelados')),
-                  ],
-                  onChanged: (val) {
-                    ref.read(orderHistoryStatusFilterProvider.notifier).state = val;
-                  },
+                const Text('Estado: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: DropdownButton<String?>(
+                    isExpanded: true,
+                    menuMaxHeight: 250,
+                    value: statusFilter,
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos los Estados')),
+                      DropdownMenuItem(value: 'PENDING', child: Text('Pendientes')),
+                      DropdownMenuItem(value: 'DELIVERED', child: Text('Entregados')),
+                      DropdownMenuItem(value: 'CANCELLED', child: Text('Eliminados / Cancelados')),
+                    ],
+                    onChanged: (val) {
+                      ref.read(orderHistoryStatusFilterProvider.notifier).state = val;
+                    },
+                  ),
                 ),
               ],
             ),

@@ -42,6 +42,15 @@ void main() {
       var queueManager1 = SyncQueueManager(db1);
       var expRepo1 = ExpensesRepository(db: db1, queueManager: queueManager1, syncEngine: mockSyncEngine);
 
+      await db1.into(db1.expenseCategoriesTable).insert(
+            ExpenseCategoriesTableCompanion.insert(
+              id: 'cat-test',
+              name: 'Insumos Test',
+              createdAt: DateTime.now().toUtc(),
+              updatedAt: DateTime.now().toUtc(),
+            ),
+          );
+
       final exp = await expRepo1.createExpense(
         description: 'Gasto Persistente',
         amount: 250.0,

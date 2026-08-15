@@ -38,13 +38,42 @@ class SyncQueueManager {
     return operationId;
   }
 
-  /// Obtiene operaciones pendientes para enviar al servidor.
+  static int _entityPriority(String entityType) {
+    switch (entityType.toLowerCase()) {
+      case 'expense_category':
+        return 1;
+      case 'dish':
+        return 2;
+      case 'daily_menu':
+        return 3;
+      case 'expense':
+        return 4;
+      case 'order':
+        return 5;
+      default:
+        return 10;
+    }
+  }
+
+  /// Obtiene operaciones pendientes para enviar al servidor ordenadas por prioridad de dependencias y fecha.
   Future<List<SyncQueueTableData>> getPendingOperations({int limit = 100}) async {
-    return (_db.select(_db.syncQueueTable)
+    final ops = await (_db.select(_db.syncQueueTable)
           ..where((t) => t.status.equals('PENDING'))
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)])
           ..limit(limit))
         .get();
+
+    final sortedOps = List<SyncQueueTableData>.from(ops);
+    sortedOps.sort((a, b) {
+      final prioA = _entityPriority(a.entityType);
+      final prioB = _entityPriority(b.entityType);
+      if (prioA != prioB) {
+        return prioA.compareTo(prioB);
+      }
+      return a.createdAt.compareTo(b.createdAt);
+    });
+
+    return sortedOps;
   }
 
   /// Actualiza el estado de una operación en la cola.

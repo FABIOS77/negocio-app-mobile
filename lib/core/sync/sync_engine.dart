@@ -199,9 +199,14 @@ class SyncEngine {
               'items': itemsList,
             };
           }
+        } else if (entityType == 'expense_category') {
+          cleanPayload = {
+            'name': (rawPayload['name'] ?? '').toString().trim(),
+            if (rawPayload['active'] != null) 'active': rawPayload['active'] == true,
+          };
         } else if (entityType == 'expense') {
           cleanPayload = {
-            'description': (rawPayload['description'] ?? '').toString(),
+            'description': (rawPayload['description'] ?? '').toString().trim(),
             'amount': ParseUtils.toDouble(rawPayload['amount']),
             'category_id': (rawPayload['category_id'] ?? rawPayload['categoryId'])?.toString() ?? '',
             'payment_method': (rawPayload['payment_method'] ?? rawPayload['paymentMethod'])?.toString() ?? 'CASH',
@@ -437,23 +442,21 @@ class SyncEngine {
             snapshot['deletedAt'] != null ||
             snapshot['active'] == false;
 
-        if (isDeleted) {
-          await (_db.update(_db.expenseCategoriesTable)..where((t) => t.id.equals(entityId))).write(
-            ExpenseCategoriesTableCompanion(active: const Value(false), version: Value(version), syncStatus: const Value('SYNCED')),
-          );
-        } else {
-          await _db.into(_db.expenseCategoriesTable).insertOnConflictUpdate(
-                ExpenseCategoriesTableCompanion.insert(
-                  id: entityId,
-                  name: snapshot['name'] ?? '',
-                  active: const Value(true),
-                  version: Value(version),
-                  syncStatus: const Value('SYNCED'),
-                  createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
-                  updatedAt: DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now,
-                ),
-              );
-        }
+        final existingCat = await (_db.select(_db.expenseCategoriesTable)..where((t) => t.id.equals(entityId))).getSingleOrNull();
+        final catName = (snapshot['name'] ?? existingCat?.name ?? '').toString();
+        final catActive = !isDeleted && (snapshot['active'] != false);
+
+        await _db.into(_db.expenseCategoriesTable).insertOnConflictUpdate(
+              ExpenseCategoriesTableCompanion.insert(
+                id: entityId,
+                name: catName,
+                active: Value(catActive),
+                version: Value(version),
+                syncStatus: const Value('SYNCED'),
+                createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? existingCat?.createdAt ?? now,
+                updatedAt: DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now,
+              ),
+            );
         break;
 
       case 'expense':
@@ -462,25 +465,57 @@ class SyncEngine {
             snapshot['deleted_at'] != null ||
             snapshot['deletedAt'] != null;
 
+        // Si el snapshot del gasto incluye el objeto anidado 'category', actualizar también la categoría en SQLite
+        final catMap = snapshot['category'];
+        if (catMap is Map) {
+          final catId = (catMap['id'] ?? snapshot['categoryId'] ?? snapshot['category_id'])?.toString();
+          final catName = catMap['name']?.toString() ?? '';
+          final catActive = catMap['active'] != false;
+          if (catId != null && catId.isNotEmpty && catName.isNotEmpty) {
+            await _db.into(_db.expenseCategoriesTable).insertOnConflictUpdate(
+                  ExpenseCategoriesTableCompanion.insert(
+                    id: catId,
+                    name: catName,
+                    active: Value(catActive),
+                    version: const Value(1),
+                    syncStatus: const Value('SYNCED'),
+                    createdAt: now,
+                    updatedAt: now,
+                  ),
+                );
+          }
+        }
+
         if (isDeleted) {
           final deletedAt = DateTime.tryParse(snapshot['deletedAt'] ?? snapshot['deleted_at'] ?? '') ?? now;
           await (_db.update(_db.expensesTable)..where((t) => t.id.equals(entityId))).write(
             ExpensesTableCompanion(deletedAt: Value(deletedAt), version: Value(version), syncStatus: const Value('SYNCED')),
           );
         } else {
+          final existingExp = await (_db.select(_db.expensesTable)..where((t) => t.id.equals(entityId))).getSingleOrNull();
+
+          final description = (snapshot['description'] ?? existingExp?.description ?? '').toString();
+          final amount = ParseUtils.toDouble(snapshot['amount'], existingExp?.amount ?? 0.0);
+          final categoryId = (snapshot['categoryId'] ?? snapshot['category_id'] ?? existingExp?.categoryId ?? '').toString();
+          final paymentMethod = (snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? existingExp?.paymentMethod ?? 'CASH').toString();
+          final expenseDate = (snapshot['expenseDate'] ?? snapshot['expense_date'] ?? existingExp?.expenseDate ?? '').toString();
+          final createdBy = (snapshot['createdBy'] ?? snapshot['created_by'] ?? existingExp?.createdBy ?? 'local-user').toString();
+          final createdAt = DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? existingExp?.createdAt ?? now;
+          final updatedAt = DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now;
+
           await _db.into(_db.expensesTable).insertOnConflictUpdate(
                 ExpensesTableCompanion.insert(
                   id: entityId,
-                  description: snapshot['description'] ?? '',
-                  amount: ParseUtils.toDouble(snapshot['amount']),
-                  categoryId: snapshot['categoryId'] ?? snapshot['category_id'] ?? '',
-                  paymentMethod: snapshot['paymentMethod'] ?? snapshot['payment_method'] ?? 'CASH',
-                  expenseDate: snapshot['expenseDate'] ?? snapshot['expense_date'] ?? '',
-                  createdBy: snapshot['createdBy'] ?? snapshot['created_by'] ?? '',
+                  description: description,
+                  amount: amount,
+                  categoryId: categoryId,
+                  paymentMethod: paymentMethod,
+                  expenseDate: expenseDate,
+                  createdBy: createdBy,
                   version: Value(version),
                   syncStatus: const Value('SYNCED'),
-                  createdAt: DateTime.tryParse(snapshot['createdAt'] ?? snapshot['created_at'] ?? '') ?? now,
-                  updatedAt: DateTime.tryParse(snapshot['updatedAt'] ?? snapshot['updated_at'] ?? '') ?? now,
+                  createdAt: createdAt,
+                  updatedAt: updatedAt,
                 ),
               );
         }
