@@ -1,14 +1,28 @@
-enum FinancialPeriod { today, week, month, custom }
+enum FinancialPeriod {
+  today,
+  yesterday,
+  week,
+  month,
+  previousMonth,
+  custom,
+}
 
 class FinancialMetricsModel {
   final FinancialPeriod period;
   final double totalSales;
   final double totalExpenses;
   final double netResult; // totalSales - totalExpenses
+
+  // Desglose de Ventas por Método de Pago
   final double cashSales;
   final double qrSales;
   final double otherSales;
   final int orderCount;
+
+  // Desglose de Gastos por Método de Pago
+  final double cashExpenses;
+  final double qrExpenses;
+  final double otherExpenses;
   final int expenseCount;
 
   FinancialMetricsModel({
@@ -20,6 +34,9 @@ class FinancialMetricsModel {
     required this.qrSales,
     required this.otherSales,
     required this.orderCount,
+    required this.cashExpenses,
+    required this.qrExpenses,
+    required this.otherExpenses,
     required this.expenseCount,
   });
 
@@ -33,6 +50,9 @@ class FinancialMetricsModel {
       qrSales: 0.0,
       otherSales: 0.0,
       orderCount: 0,
+      cashExpenses: 0.0,
+      qrExpenses: 0.0,
+      otherExpenses: 0.0,
       expenseCount: 0,
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -6,6 +7,7 @@ import 'package:katering_grecia_app/core/database/app_database.dart';
 import 'package:katering_grecia_app/core/sync/sync_engine.dart';
 import 'package:katering_grecia_app/core/sync/sync_queue_manager.dart';
 import 'package:katering_grecia_app/features/dashboard/data/dashboard_repository.dart';
+import 'package:katering_grecia_app/features/dashboard/domain/dashboard_metrics_model.dart';
 import 'package:katering_grecia_app/features/dishes/data/dishes_repository.dart';
 import 'package:katering_grecia_app/features/expenses/data/expenses_repository.dart';
 import 'package:katering_grecia_app/features/financial_metrics/domain/financial_metrics_model.dart';
@@ -94,12 +96,10 @@ void main() {
 
       // Verificar Top Platos
       expect(metrics.topDishes.length, equals(2));
-      // Majadito de Pato debe ser #1 con 4 porciones (3 + 1)
       expect(metrics.topDishes.first.dishName, equals('Majadito de Pato'));
       expect(metrics.topDishes.first.totalQuantity, equals(4));
       expect(metrics.topDishes.first.totalRevenue, equals(100.0));
 
-      // Sopa de Maní debe ser #2 con 2 porciones
       expect(metrics.topDishes.last.dishName, equals('Sopa de Maní'));
       expect(metrics.topDishes.last.totalQuantity, equals(2));
     });
@@ -127,17 +127,64 @@ void main() {
 
       final metrics = await dashboardRepo.watchDashboardMetrics(period: FinancialPeriod.today).first;
 
-      // Debe contar exactamente 1 pedido (no 2)
       expect(metrics.totalOrders, equals(1));
-      // Las ventas deben ser solo Bs 40.0 (no 290.0)
       expect(metrics.totalSales, equals(40.0));
       expect(metrics.cashSales, equals(40.0));
       expect(metrics.qrSales, equals(0.0));
 
-      // Top platos solo debe contener Keperi al Horno con 1 porción, ignorando el Chicharrón cancelado
       expect(metrics.topDishes.length, equals(1));
       expect(metrics.topDishes.first.dishName, equals('Keperi al Horno'));
       expect(metrics.topDishes.first.totalQuantity, equals(1));
+    });
+
+    test('Dashboard reacts immediately to Expense mutations (CREATE, UPDATE, DELETE)', () async {
+      final completers = <Completer<DashboardMetricsModel>>[
+        Completer<DashboardMetricsModel>(),
+      ];
+
+      final sub = dashboardRepo.watchDashboardMetrics(period: FinancialPeriod.today).listen((m) {
+        if (!completers.last.isCompleted) {
+          completers.last.complete(m);
+        }
+      });
+
+      // 1. Dashboard inicial (gastos = 0)
+      var current = await completers.last.future;
+      expect(current.totalExpenses, equals(0.0));
+
+      // 2. Crear gasto: Bs 50.0
+      completers.add(Completer<DashboardMetricsModel>());
+      final exp = await expensesRepo.createExpense(
+        description: 'Compra Verduras',
+        amount: 50.0,
+        categoryId: 'cat-1',
+        paymentMethod: 'CASH',
+      );
+
+      current = await completers.last.future;
+      expect(current.totalExpenses, equals(50.0));
+
+      // 3. Editar gasto: Bs 50.0 -> Bs 80.0
+      completers.add(Completer<DashboardMetricsModel>());
+      await expensesRepo.updateExpense(
+        id: exp.id,
+        description: 'Compra Verduras y Frutas',
+        amount: 80.0,
+        categoryId: 'cat-1',
+        paymentMethod: 'CASH',
+      );
+
+      current = await completers.last.future;
+      expect(current.totalExpenses, equals(80.0));
+
+      // 4. Eliminar gasto -> totalExpenses vuelve a 0.0 inmediatamente
+      completers.add(Completer<DashboardMetricsModel>());
+      await expensesRepo.deleteExpense(exp.id);
+
+      current = await completers.last.future;
+      expect(current.totalExpenses, equals(0.0));
+
+      await sub.cancel();
     });
   });
 }

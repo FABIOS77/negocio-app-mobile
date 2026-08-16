@@ -9,9 +9,18 @@ final financialMetricsRepositoryProvider = Provider<FinancialMetricsRepository>(
 });
 
 final selectedFinancialPeriodProvider = StateProvider<FinancialPeriod>((ref) => FinancialPeriod.today);
+final financialCustomStartProvider = StateProvider<String?>((ref) => null);
+final financialCustomEndProvider = StateProvider<String?>((ref) => null);
 
 final financialMetricsStreamProvider = StreamProvider<FinancialMetricsModel>((ref) {
   final repository = ref.watch(financialMetricsRepositoryProvider);
   final period = ref.watch(selectedFinancialPeriodProvider);
-  return repository.watchMetrics(period: period);
+  final customStart = ref.watch(financialCustomStartProvider);
+  final customEnd = ref.watch(financialCustomEndProvider);
+
+  return repository.watchMetrics(
+    period: period,
+    customStartStr: customStart,
+    customEndStr: customEnd,
+  );
 });

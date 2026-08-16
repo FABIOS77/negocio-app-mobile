@@ -18,7 +18,7 @@ class TimezoneUtils {
     return DateFormat('yyyy-MM-dd').format(yesterday);
   }
 
-  /// Retorna el rango de fechas de esta semana (Lunes a Domingo o Hoy) en formato YYYY-MM-DD
+  /// Retorna el rango de fechas de esta semana (Lunes a Domingo) en formato YYYY-MM-DD
   static ({String from, String to}) getThisWeekBusinessDateRange() {
     final nowLaPaz = getNowLaPaz();
     final startOfWeek = nowLaPaz.subtract(Duration(days: nowLaPaz.weekday - 1));
@@ -37,6 +37,17 @@ class TimezoneUtils {
     return (
       from: DateFormat('yyyy-MM-dd').format(startOfMonth),
       to: DateFormat('yyyy-MM-dd').format(endOfMonth),
+    );
+  }
+
+  /// Retorna el rango de fechas del mes anterior (1er día al último día del mes pasado) en formato YYYY-MM-DD
+  static ({String from, String to}) getPreviousMonthBusinessDateRange() {
+    final nowLaPaz = getNowLaPaz();
+    final startOfPrevMonth = DateTime.utc(nowLaPaz.year, nowLaPaz.month - 1, 1);
+    final endOfPrevMonth = DateTime.utc(nowLaPaz.year, nowLaPaz.month, 0);
+    return (
+      from: DateFormat('yyyy-MM-dd').format(startOfPrevMonth),
+      to: DateFormat('yyyy-MM-dd').format(endOfPrevMonth),
     );
   }
 

@@ -10,10 +10,10 @@ final dishesRepositoryProvider = Provider<DishesRepository>((ref) {
   return DishesRepository(db: db, queueManager: queueManager, syncEngine: syncEngine);
 });
 
-final dishesQueryProvider = StateProvider<String>((ref) => '');
-final activeDishesOnlyProvider = StateProvider<bool>((ref) => true);
+final dishesQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+final activeDishesOnlyProvider = StateProvider.autoDispose<bool>((ref) => true);
 
-final dishesStreamProvider = StreamProvider<List<DishModel>>((ref) {
+final dishesStreamProvider = StreamProvider.autoDispose<List<DishModel>>((ref) {
   final repository = ref.watch(dishesRepositoryProvider);
   final searchQuery = ref.watch(dishesQueryProvider);
   final activeOnly = ref.watch(activeDishesOnlyProvider);

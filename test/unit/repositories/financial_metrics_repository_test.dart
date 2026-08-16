@@ -53,8 +53,8 @@ void main() {
     await db.close();
   });
 
-  group('FinancialMetricsRepository Aggregation Tests', () {
-    test('Calculates sales, expenses and netResult correctly in SQLite', () async {
+  group('FinancialMetricsRepository Aggregation & Payment Breakdown Tests', () {
+    test('Calculates sales, expenses, payment breakdowns and netResult correctly in SQLite', () async {
       final dish = await dishesRepo.createDish(name: 'Plato Especial', price: 50.0);
 
       // Pedido 1: Bs 100.0 (CASH)
@@ -71,7 +71,7 @@ void main() {
         itemsInput: [(dishId: dish.id, quantity: 1)],
       );
 
-      // Gasto 1: Bs 40.0
+      // Gasto 1: Bs 40.0 (CASH)
       await expensesRepo.createExpense(
         description: 'Gas Garrafa',
         amount: 40.0,
@@ -79,15 +79,40 @@ void main() {
         paymentMethod: 'CASH',
       );
 
+      // Gasto 2: Bs 60.0 (QR)
+      await expensesRepo.createExpense(
+        description: 'Insumos Mercado QR',
+        amount: 60.0,
+        categoryId: 'cat-1',
+        paymentMethod: 'QR',
+      );
+
+      // Gasto 3: Bs 25.0 (OTHER)
+      await expensesRepo.createExpense(
+        description: 'Flete Transporte',
+        amount: 25.0,
+        categoryId: 'cat-1',
+        paymentMethod: 'OTHER',
+      );
+
       final metrics = await metricsRepo.watchMetrics(period: FinancialPeriod.today).first;
 
+      // Ventas
       expect(metrics.totalSales, equals(150.0));
       expect(metrics.cashSales, equals(100.0));
       expect(metrics.qrSales, equals(50.0));
-      expect(metrics.totalExpenses, equals(40.0));
-      expect(metrics.netResult, equals(110.0)); // 150 - 40
+      expect(metrics.otherSales, equals(0.0));
       expect(metrics.orderCount, equals(2));
-      expect(metrics.expenseCount, equals(1));
+
+      // Gastos
+      expect(metrics.totalExpenses, equals(125.0)); // 40 + 60 + 25
+      expect(metrics.cashExpenses, equals(40.0));
+      expect(metrics.qrExpenses, equals(60.0));
+      expect(metrics.otherExpenses, equals(25.0));
+      expect(metrics.expenseCount, equals(3));
+
+      // Resultado Neto
+      expect(metrics.netResult, equals(25.0)); // 150 - 125
     });
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/timezone_utils.dart';
 import '../../common/presentation/widgets/confirm_dialog.dart';
@@ -13,6 +14,49 @@ import 'widgets/manage_categories_dialog.dart';
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
 
+  Future<void> _pickCustomRange(BuildContext context, WidgetRef ref) async {
+    final nowLaPaz = TimezoneUtils.getNowLaPaz();
+    final currentFrom = ref.read(expensesFilterDateFromProvider);
+    final currentTo = ref.read(expensesFilterDateToProvider);
+
+    DateTime initialStartDate = currentFrom != null ? DateTime.parse(currentFrom) : nowLaPaz;
+    DateTime initialEndDate = currentTo != null ? DateTime.parse(currentTo) : nowLaPaz;
+
+    if (initialStartDate.isAfter(initialEndDate)) {
+      initialStartDate = initialEndDate;
+    }
+
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: initialStartDate, end: initialEndDate),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      helpText: 'SELECCIONAR RANGO DE GASTOS',
+      cancelText: 'CANCELAR',
+      confirmText: 'CONFIRMAR',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Colors.red,
+                  onPrimary: Colors.white,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final fromStr = DateFormat('yyyy-MM-dd').format(picked.start);
+      final toStr = DateFormat('yyyy-MM-dd').format(picked.end);
+
+      ref.read(expensesFilterDateProvider.notifier).state = null;
+      ref.read(expensesFilterDateFromProvider.notifier).state = fromStr;
+      ref.read(expensesFilterDateToProvider.notifier).state = toStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final expensesAsync = ref.watch(expensesStreamProvider);
@@ -24,8 +68,21 @@ class ExpensesScreen extends ConsumerWidget {
     final selectedDateTo = ref.watch(expensesFilterDateToProvider);
     final repository = ref.read(expensesRepositoryProvider);
 
-    final isCustomRange = selectedDateFrom != null && selectedDateTo != null;
     final todayStr = TimezoneUtils.getTodayBusinessDate();
+    final yesterdayStr = TimezoneUtils.getYesterdayBusinessDate();
+    final weekRange = TimezoneUtils.getThisWeekBusinessDateRange();
+    final monthRange = TimezoneUtils.getThisMonthBusinessDateRange();
+    final prevMonthRange = TimezoneUtils.getPreviousMonthBusinessDateRange();
+
+    final isAllDates = selectedDate == null && selectedDateFrom == null && selectedDateTo == null;
+    final isToday = selectedDate == todayStr;
+    final isYesterday = selectedDate == yesterdayStr;
+    final isThisWeek = selectedDateFrom == weekRange.from && selectedDateTo == weekRange.to;
+    final isThisMonth = selectedDateFrom == monthRange.from && selectedDateTo == monthRange.to;
+    final isPrevMonth = selectedDateFrom == prevMonthRange.from && selectedDateTo == prevMonthRange.to;
+    final isCustomRange = selectedDateFrom != null && selectedDateTo != null && !isThisWeek && !isThisMonth && !isPrevMonth;
+
+    final hasActiveFilters = selectedCategory != null || selectedPayment != null || !isAllDates;
 
     return Scaffold(
       appBar: AppBar(
@@ -85,7 +142,7 @@ class ExpensesScreen extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Filtros de Gastos:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        if (selectedCategory != null || selectedPayment != null || selectedDate != null || isCustomRange)
+                        if (hasActiveFilters)
                           TextButton(
                             onPressed: () {
                               ref.read(expensesFilterCategoryProvider.notifier).state = null;
@@ -106,7 +163,7 @@ class ExpensesScreen extends ConsumerWidget {
                         children: [
                           ChoiceChip(
                             label: const Text('Todos'),
-                            selected: selectedDate == null && !isCustomRange,
+                            selected: isAllDates,
                             onSelected: (selected) {
                               if (selected) {
                                 ref.read(expensesFilterDateProvider.notifier).state = null;
@@ -118,7 +175,7 @@ class ExpensesScreen extends ConsumerWidget {
                           const SizedBox(width: 6),
                           ChoiceChip(
                             label: const Text('Hoy'),
-                            selected: selectedDate == todayStr,
+                            selected: isToday,
                             onSelected: (selected) {
                               if (selected) {
                                 ref.read(expensesFilterDateProvider.notifier).state = todayStr;
@@ -129,17 +186,59 @@ class ExpensesScreen extends ConsumerWidget {
                           ),
                           const SizedBox(width: 6),
                           ChoiceChip(
-                            label: const Text('Esta Semana'),
-                            selected: isCustomRange,
+                            label: const Text('Ayer'),
+                            selected: isYesterday,
                             onSelected: (selected) {
                               if (selected) {
-                                final now = DateTime.now();
-                                final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                                final fromStr = TimezoneUtils.toBusinessDateString(startOfWeek);
-                                ref.read(expensesFilterDateProvider.notifier).state = null;
-                                ref.read(expensesFilterDateFromProvider.notifier).state = fromStr;
-                                ref.read(expensesFilterDateToProvider.notifier).state = todayStr;
+                                ref.read(expensesFilterDateProvider.notifier).state = yesterdayStr;
+                                ref.read(expensesFilterDateFromProvider.notifier).state = null;
+                                ref.read(expensesFilterDateToProvider.notifier).state = null;
                               }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Esta Semana'),
+                            selected: isThisWeek,
+                            onSelected: (selected) {
+                              if (selected) {
+                                ref.read(expensesFilterDateProvider.notifier).state = null;
+                                ref.read(expensesFilterDateFromProvider.notifier).state = weekRange.from;
+                                ref.read(expensesFilterDateToProvider.notifier).state = weekRange.to;
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Este Mes'),
+                            selected: isThisMonth,
+                            onSelected: (selected) {
+                              if (selected) {
+                                ref.read(expensesFilterDateProvider.notifier).state = null;
+                                ref.read(expensesFilterDateFromProvider.notifier).state = monthRange.from;
+                                ref.read(expensesFilterDateToProvider.notifier).state = monthRange.to;
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Mes Anterior'),
+                            selected: isPrevMonth,
+                            onSelected: (selected) {
+                              if (selected) {
+                                ref.read(expensesFilterDateProvider.notifier).state = null;
+                                ref.read(expensesFilterDateFromProvider.notifier).state = prevMonthRange.from;
+                                ref.read(expensesFilterDateToProvider.notifier).state = prevMonthRange.to;
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            avatar: const Icon(Icons.date_range, size: 14),
+                            label: Text(isCustomRange ? '${TimezoneUtils.formatDisplayDate(selectedDateFrom)} - ${TimezoneUtils.formatDisplayDate(selectedDateTo)}' : 'Personalizado'),
+                            selected: isCustomRange,
+                            onSelected: (selected) {
+                              _pickCustomRange(context, ref);
                             },
                           ),
                         ],
@@ -148,49 +247,63 @@ class ExpensesScreen extends ConsumerWidget {
                     const SizedBox(height: 10),
                     Row(
                       children: [
+                        // Category Dropdown
                         Expanded(
                           flex: 3,
-                          child: DropdownButtonFormField<String?>(
-                            isExpanded: true,
-                            menuMaxHeight: 250,
-                            initialValue: selectedCategory,
-                            decoration: const InputDecoration(
-                              labelText: 'Categoría',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('Todas', overflow: TextOverflow.ellipsis)),
-                              ...(categoriesAsync.asData?.value ?? []).map(
-                                (c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)),
+                          child: categoriesAsync.when(
+                            data: (cats) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            ],
-                            onChanged: (val) {
-                              ref.read(expensesFilterCategoryProvider.notifier).state = val;
-                            },
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String?>(
+                                  isExpanded: true,
+                                  menuMaxHeight: 250,
+                                  value: selectedCategory,
+                                  hint: const Text('Todas las Categorías', overflow: TextOverflow.ellipsis),
+                                  items: [
+                                    const DropdownMenuItem(value: null, child: Text('Todas las Categorías', overflow: TextOverflow.ellipsis)),
+                                    ...cats.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis))),
+                                  ],
+                                  onChanged: (val) {
+                                    ref.read(expensesFilterCategoryProvider.notifier).state = val;
+                                  },
+                                ),
+                              ),
+                            ),
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // Payment Method Dropdown
                         Expanded(
                           flex: 2,
-                          child: DropdownButtonFormField<String?>(
-                            isExpanded: true,
-                            menuMaxHeight: 250,
-                            initialValue: selectedPayment,
-                            decoration: const InputDecoration(
-                              labelText: 'Pago',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            items: const [
-                              DropdownMenuItem(value: null, child: Text('Todos', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'CASH', child: Text('Efectivo', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'QR', child: Text('QR', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: 'OTHER', child: Text('Otro', overflow: TextOverflow.ellipsis)),
-                            ],
-                            onChanged: (val) {
-                              ref.read(expensesFilterPaymentProvider.notifier).state = val;
-                            },
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String?>(
+                                isExpanded: true,
+                                menuMaxHeight: 250,
+                                value: selectedPayment,
+                                hint: const Text('Todos los Pagos', overflow: TextOverflow.ellipsis),
+                                items: const [
+                                  DropdownMenuItem(value: null, child: Text('Todos los Pagos', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'CASH', child: Text('Efectivo', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'QR', child: Text('QR', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'OTHER', child: Text('Otro', overflow: TextOverflow.ellipsis)),
+                                ],
+                                onChanged: (val) {
+                                  ref.read(expensesFilterPaymentProvider.notifier).state = val;
+                                },
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -200,31 +313,31 @@ class ExpensesScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Historial de Gastos:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
             expensesAsync.when(
               skipLoadingOnReload: true,
               skipLoadingOnRefresh: true,
               data: (expenses) {
                 if (expenses.isEmpty) {
-                  return const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: EmptyStateWidget(
-                        icon: Icons.money_off,
-                        title: 'No hay gastos registrados para este filtro',
-                        subtitle: '¡Toca el botón + NUEVO GASTO para registrar egresos offline!',
-                      ),
-                    ),
+                  return const EmptyStateWidget(
+                    icon: Icons.money_off,
+                    title: 'No hay gastos registrados',
+                    subtitle: 'Los gastos registrados aparecerán aquí y se sincronizarán cuando estés en línea.',
                   );
                 }
+
+                final totalExpenses = expenses.fold<double>(0.0, (sum, item) => sum + item.amount);
+
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (expensesAsync.isRefreshing || expensesAsync.isReloading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 8.0),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Listado de Gastos (${expenses.length}):', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Total: ${CurrencyFormatter.formatBOB(totalExpenses)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -251,7 +364,7 @@ class ExpensesScreen extends ConsumerWidget {
                                   );
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Gasto actualizado exitosamente'), backgroundColor: Colors.green),
+                                      const SnackBar(content: Text('Gasto actualizado offline'), backgroundColor: Colors.green),
                                     );
                                   }
                                 },
@@ -259,18 +372,19 @@ class ExpensesScreen extends ConsumerWidget {
                             );
                           },
                           onDelete: () async {
-                            final confirm = await ConfirmDialog.show(
-                              context,
-                              title: 'Eliminar Gasto',
-                              content: '¿Desea eliminar el gasto "${expense.description}" por ${CurrencyFormatter.formatBOB(expense.amount)}?',
-                              confirmLabel: 'SÍ, ELIMINAR',
-                              confirmColor: Colors.red,
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => const ConfirmDialog(
+                                title: 'Eliminar Gasto',
+                                content: '¿Estás seguro de eliminar este gasto? El registro se marcará para borrado y sincronización.',
+                                confirmLabel: 'ELIMINAR',
+                              ),
                             );
-                            if (confirm) {
+                            if (confirm == true) {
                               await repository.deleteExpense(expense.id);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Gasto eliminado exitosamente'), backgroundColor: Colors.green),
+                                  const SnackBar(content: Text('Gasto eliminado offline'), backgroundColor: Colors.orange),
                                 );
                               }
                             }
