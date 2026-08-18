@@ -156,5 +156,8 @@ void main() {
     expect(fullOrder!.items.length, equals(1));
     expect(fullOrder.items.first.quantity, equals(170));
     expect(fullOrder.items.first.dishNameSnapshot, equals('Majadito de Pato'));
+
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
   });
 }

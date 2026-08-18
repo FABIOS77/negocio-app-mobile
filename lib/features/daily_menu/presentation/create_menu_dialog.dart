@@ -22,16 +22,13 @@ class CreateMenuDialog extends StatefulWidget {
 }
 
 class _CreateMenuDialogState extends State<CreateMenuDialog> {
-  late TextEditingController _dateController;
-  late TextEditingController _searchController;
+  late final TextEditingController _dateController;
   final Set<String> _selectedDishIds = {};
-  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _dateController = TextEditingController(text: widget.initialDate);
-    _searchController = TextEditingController();
     if (widget.initialSelectedDishIds != null) {
       _selectedDishIds.addAll(widget.initialSelectedDishIds!);
     }
@@ -40,7 +37,6 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
   @override
   void dispose() {
     _dateController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -58,12 +54,6 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final activeDishes = widget.availableDishes.where((d) => d.active).toList();
-    final filteredDishes = activeDishes.where((dish) {
-      if (_searchQuery.isEmpty) return true;
-      return dish.name.toLowerCase().contains(_searchQuery);
-    }).toList();
-
     return AlertDialog(
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -96,71 +86,10 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  labelText: 'Buscar plato...',
-                  hintText: 'Ej. Sopa, Pique...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              _searchController.clear();
-                              _searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val.trim().toLowerCase();
-                  });
-                },
+              _DishSelector(
+                availableDishes: widget.availableDishes,
+                selectedDishIds: _selectedDishIds,
               ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Seleccionar Platos:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(
-                    '${_selectedDishIds.length} seleccionados',
-                    style: const TextStyle(fontSize: 12, color: Colors.deepOrange, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (activeDishes.isEmpty)
-                const Text('No hay platos activos guardados en SQLite.', style: TextStyle(color: Colors.grey))
-              else if (filteredDishes.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16.0),
-                  child: Center(
-                    child: Text('No se encontraron platos con esa búsqueda', style: TextStyle(color: Colors.grey)),
-                  ),
-                )
-              else
-                ...filteredDishes.map((dish) {
-                  final isSelected = _selectedDishIds.contains(dish.id);
-                  return CheckboxListTile(
-                    title: Text(dish.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Bs ${dish.price.toStringAsFixed(2)}'),
-                    value: isSelected,
-                    onChanged: (val) {
-                      setState(() {
-                        if (val ?? false) {
-                          _selectedDishIds.add(dish.id);
-                        } else {
-                          _selectedDishIds.remove(dish.id);
-                        }
-                      });
-                    },
-                  );
-                }),
             ],
           ),
         ),
@@ -172,6 +101,139 @@ class _CreateMenuDialogState extends State<CreateMenuDialog> {
           onPressed: _submit,
           child: const Text('GUARDAR MENÚ'),
         ),
+      ],
+    );
+  }
+}
+
+class _DishSelector extends StatefulWidget {
+  final List<DishModel> availableDishes;
+  final Set<String> selectedDishIds;
+
+  const _DishSelector({
+    required this.availableDishes,
+    required this.selectedDishIds,
+  });
+
+  @override
+  State<_DishSelector> createState() => _DishSelectorState();
+}
+
+class _DishSelectorState extends State<_DishSelector> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeDishes = widget.availableDishes.where((d) => d.active).toList();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Campo de Búsqueda con ValueListenableBuilder para reflejar suffixIcon sin rebuilds externos
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _searchController,
+          builder: (context, value, _) {
+            final hasText = value.text.isNotEmpty;
+            return TextField(
+              controller: _searchController,
+              keyboardType: TextInputType.text,
+              textCapitalization: TextCapitalization.none,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: 'Buscar plato...',
+                hintText: 'Ej. Sopa, Pique...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: hasText
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 2. Cabecera y Contador de Seleccionados Global
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Seleccionar Platos:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              '${widget.selectedDishIds.length} seleccionados',
+              style: const TextStyle(fontSize: 12, color: Colors.deepOrange, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // 3. Lista de Platos Filtrados reactiva a _searchController
+        if (activeDishes.isEmpty)
+          const Text('No hay platos activos guardados en SQLite.', style: TextStyle(color: Colors.grey))
+        else
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, textValue, _) {
+              final query = textValue.text.trim().toLowerCase();
+              final filteredDishes = activeDishes.where((dish) {
+                if (query.isEmpty) return true;
+                return dish.name.toLowerCase().contains(query);
+              }).toList();
+
+              if (filteredDishes.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                  child: Center(
+                    child: Text('No se encontraron platos con esa búsqueda', style: TextStyle(color: Colors.grey)),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filteredDishes.length,
+                itemBuilder: (context, index) {
+                  final dish = filteredDishes[index];
+                  final isSelected = widget.selectedDishIds.contains(dish.id);
+
+                  return CheckboxListTile(
+                    title: Text(dish.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Bs ${dish.price.toStringAsFixed(2)}'),
+                    value: isSelected,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val ?? false) {
+                          widget.selectedDishIds.add(dish.id);
+                        } else {
+                          widget.selectedDishIds.remove(dish.id);
+                        }
+                      });
+                    },
+                  );
+                },
+              );
+            },
+          ),
       ],
     );
   }

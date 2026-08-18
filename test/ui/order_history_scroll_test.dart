@@ -46,7 +46,7 @@ void main() {
             total: 20.0,
             paymentMethod: 'CASH',
             status: 'PENDING',
-            orderedAt: now.subtract(Duration(minutes: i)),
+            orderedAt: now.subtract(Duration(minutes: 60 - i)),
             createdBy: 'user',
             createdAt: now,
             updatedAt: now,
@@ -82,15 +82,16 @@ void main() {
 
     // 1. Verificar que el límite inicial es 50
     expect(container.read(orderHistoryLimitProvider), equals(50));
-    expect(find.text('Cliente Historial #1'), findsOneWidget);
+    expect(find.text('Cliente Historial #60'), findsOneWidget);
 
     // 2. Hacer scroll hasta el final para disparar el listener de paginación
     await tester.drag(find.byType(ListView), const Offset(0, -3000));
     await tester.pumpAndSettle();
 
-    // 3. El límite debe haberse incrementado a 100 y el item #60 debe estar visible o disponible
+    // 3. El límite debe haberse incrementado a 100
     expect(container.read(orderHistoryLimitProvider), greaterThanOrEqualTo(100));
 
+    await tester.pumpWidget(const SizedBox());
     container.dispose();
   });
 }
