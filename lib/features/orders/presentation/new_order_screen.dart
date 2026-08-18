@@ -57,6 +57,109 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     return total;
   }
 
+  void _showQuantityDialog(BuildContext context, String dishId, String dishName, int currentQty) {
+    final qtyController = TextEditingController(text: currentQty > 0 ? '$currentQty' : '');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.edit_note, color: Colors.deepOrange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                dishName,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Ingrese la cantidad de platos:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('quantity_dialog_input'),
+                controller: qtyController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Cantidad *',
+                  hintText: 'Ej. 100',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.numbers),
+                ),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) {
+                    return 'Ingrese una cantidad';
+                  }
+                  final parsed = int.tryParse(val.trim());
+                  if (parsed == null || parsed < 0) {
+                    return 'Ingrese un número entero válido (≥ 0)';
+                  }
+                  return null;
+                },
+                onFieldSubmitted: (val) {
+                  if (formKey.currentState?.validate() ?? false) {
+                    final qty = int.parse(val.trim());
+                    setState(() {
+                      _itemQuantities[dishId] = qty;
+                    });
+                    Navigator.pop(ctx);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [10, 25, 50, 100, 150].map((preset) {
+                  return ActionChip(
+                    label: Text('+$preset', style: const TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      final current = int.tryParse(qtyController.text.trim()) ?? 0;
+                      qtyController.text = '${current + preset}';
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepOrange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                final qty = int.parse(qtyController.text.trim());
+                setState(() {
+                  _itemQuantities[dishId] = qty;
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('ACEPTAR', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _submit() async {
     final customer = _customerController.text.trim();
     if (customer.isEmpty) {
@@ -220,7 +323,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                                     Row(
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline, size: 32, color: Colors.red),
+                                          key: Key('btn_remove_${dish.id}'),
+                                          icon: const Icon(Icons.remove_circle_outline, size: 30, color: Colors.red),
                                           onPressed: currentQty > 0
                                               ? () {
                                                   setState(() {
@@ -229,9 +333,35 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                                                 }
                                               : null,
                                         ),
-                                        Text('$currentQty', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                        InkWell(
+                                          key: Key('qty_badge_${dish.id}'),
+                                          onTap: () => _showQuantityDialog(context, dish.id, dish.name, currentQty),
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: currentQty > 0 ? Colors.deepOrange.shade50 : Colors.grey.shade100,
+                                              border: Border.all(
+                                                color: currentQty > 0 ? Colors.deepOrange.shade300 : Colors.grey.shade300,
+                                                width: 1.5,
+                                              ),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              '$currentQty',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: currentQty > 0 ? Colors.deepOrange.shade900 : Colors.black87,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                         IconButton(
-                                          icon: const Icon(Icons.add_circle_outline, size: 32, color: Colors.green),
+                                          key: Key('btn_add_${dish.id}'),
+                                          icon: const Icon(Icons.add_circle_outline, size: 30, color: Colors.green),
                                           onPressed: () {
                                             setState(() {
                                               _itemQuantities[dish.id] = currentQty + 1;
