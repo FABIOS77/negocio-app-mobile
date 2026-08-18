@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
@@ -7,6 +6,7 @@ import '../../../core/sync/sync_queue_manager.dart';
 import '../../../core/utils/timezone_utils.dart';
 import '../domain/order_item_model.dart';
 import '../domain/order_model.dart';
+import '../domain/order_summary_model.dart';
 
 class OrdersRepository {
   final AppDatabase _db;
@@ -24,72 +24,15 @@ class OrdersRepository {
         _syncEngine = syncEngine,
         _uuid = uuid ?? const Uuid();
 
-  /// Helper reactivo para combinar 2 streams emitiendo inmediatamente cuando cualquiera cambie
-  Stream<T3> _combineLatest2<T1, T2, T3>(
-    Stream<T1> stream1,
-    Stream<T2> stream2,
-    T3 Function(T1 a, T2 b) combiner,
-  ) {
-    late StreamController<T3> controller;
-    StreamSubscription<T1>? sub1;
-    StreamSubscription<T2>? sub2;
-    T1? val1;
-    T2? val2;
-    bool hasVal1 = false;
-    bool hasVal2 = false;
-
-    void emitIfReady() {
-      if (hasVal1 && hasVal2 && !controller.isClosed) {
-        controller.add(combiner(val1 as T1, val2 as T2));
-      }
-    }
-
-    controller = StreamController<T3>.broadcast(
-      onListen: () {
-        sub1 ??= stream1.listen(
-          (data) {
-            val1 = data;
-            hasVal1 = true;
-            emitIfReady();
-          },
-          onError: (err) {
-            if (!controller.isClosed) controller.addError(err);
-          },
-        );
-        sub2 ??= stream2.listen(
-          (data) {
-            val2 = data;
-            hasVal2 = true;
-            emitIfReady();
-          },
-          onError: (err) {
-            if (!controller.isClosed) controller.addError(err);
-          },
-        );
-      },
-      onCancel: () async {
-        if (!controller.hasListener) {
-          await sub1?.cancel();
-          await sub2?.cancel();
-          sub1 = null;
-          sub2 = null;
-        }
-      },
-    );
-
-    return controller.stream;
-  }
-
   /// Observa reactivamente los pedidos activos del día (America/La_Paz) ordenados por orderedAt DESC, excluyendo cancelados
-  Stream<List<OrderModel>> watchTodayOrders() {
+  Stream<List<OrderSummaryModel>> watchTodayOrders() {
     final todayDate = TimezoneUtils.getTodayBusinessDate();
     return watchOrders(date: todayDate, excludeCancelled: true, limit: 100);
   }
 
   /// Observa pedidos con filtros de fecha (desde/hasta en America/La_Paz), estado, búsqueda de texto paginados.
-  /// Escucha reactivamente tanto orders_table como order_items_table para garantizar que los items
-  /// siempre se reconstruyan y emitan completos atómicamente.
-  Stream<List<OrderModel>> watchOrders({
+  /// Emite OrderSummaryModel con itemsCount agregado en SQL de forma instantánea y reactiva con readsFrom.
+  Stream<List<OrderSummaryModel>> watchOrders({
     String? status,
     String? date,
     String? dateFrom,
@@ -99,81 +42,94 @@ class OrdersRepository {
     int limit = 50,
     int offset = 0,
   }) {
-    final query = _db.select(_db.ordersTable);
+    final whereClauses = <String>[];
+    final variables = <Variable>[];
 
     // 1. Filtro de estado
     if (status != null && status.isNotEmpty) {
-      query.where((t) => t.status.equals(status));
+      whereClauses.add('o.status = ?');
+      variables.add(Variable.withString(status));
     } else if (excludeCancelled) {
-      query.where((t) => t.status.isNotValue('CANCELLED'));
+      whereClauses.add("o.status != 'CANCELLED'");
     }
 
     // 2. Filtro de fechas en America/La_Paz (UTC-4: el inicio del día es a las 04:00:00Z)
     if (date != null && date.isNotEmpty) {
       final dateStart = DateTime.parse('${date}T00:00:00.000Z').add(const Duration(hours: 4));
       final dateEnd = dateStart.add(const Duration(days: 1));
-      query.where((t) => t.orderedAt.isBiggerOrEqualValue(dateStart) & t.orderedAt.isSmallerThanValue(dateEnd));
+      whereClauses.add('o.ordered_at >= ? AND o.ordered_at < ?');
+      variables.add(Variable.withDateTime(dateStart));
+      variables.add(Variable.withDateTime(dateEnd));
     } else {
       if (dateFrom != null && dateFrom.isNotEmpty) {
         final dateStart = DateTime.parse('${dateFrom}T00:00:00.000Z').add(const Duration(hours: 4));
-        query.where((t) => t.orderedAt.isBiggerOrEqualValue(dateStart));
+        whereClauses.add('o.ordered_at >= ?');
+        variables.add(Variable.withDateTime(dateStart));
       }
       if (dateTo != null && dateTo.isNotEmpty) {
         final dateEnd = DateTime.parse('${dateTo}T00:00:00.000Z').add(const Duration(hours: 4 + 24));
-        query.where((t) => t.orderedAt.isSmallerThanValue(dateEnd));
+        whereClauses.add('o.ordered_at < ?');
+        variables.add(Variable.withDateTime(dateEnd));
       }
     }
 
     // 3. Búsqueda por texto (customer_name, location_text, order_number)
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final term = '%${searchQuery.trim().toLowerCase()}%';
-      query.where((t) =>
-          t.customerName.lower().like(term) |
-          t.locationText.lower().like(term) |
-          t.orderNumber.cast<String>().like(term));
+      whereClauses.add("(LOWER(o.customer_name) LIKE ? OR LOWER(COALESCE(o.location_text, '')) LIKE ? OR CAST(COALESCE(o.order_number, '') AS TEXT) LIKE ?)");
+      variables.add(Variable.withString(term));
+      variables.add(Variable.withString(term));
+      variables.add(Variable.withString(term));
     }
 
-    query.orderBy([(t) => OrderingTerm(expression: t.orderedAt, mode: OrderingMode.desc)]);
-    query.limit(limit, offset: offset);
+    final whereSql = whereClauses.isNotEmpty ? 'WHERE ${whereClauses.join(' AND ')}' : '';
 
-    final ordersStream = query.watch();
-    final itemsStream = _db.select(_db.orderItemsTable).watch();
+    final sql = '''
+      SELECT 
+        o.id,
+        o.order_number,
+        o.customer_name,
+        o.location_text,
+        o.total,
+        o.payment_method,
+        o.status,
+        o.ordered_at,
+        o.created_by,
+        o.version,
+        o.sync_status,
+        o.created_at,
+        o.updated_at,
+        COALESCE((SELECT COUNT(*) FROM order_items_table WHERE order_id = o.id), 0) AS items_count
+      FROM orders_table o
+      $whereSql
+      ORDER BY o.ordered_at DESC
+      LIMIT ? OFFSET ?
+    ''';
 
-    return _combineLatest2(ordersStream, itemsStream, (orderRows, allItemRows) {
-      if (orderRows.isEmpty) return <OrderModel>[];
+    variables.add(Variable.withInt(limit));
+    variables.add(Variable.withInt(offset));
 
-      final itemsByOrderId = <String, List<OrderItemModel>>{};
-      for (final item in allItemRows) {
-        final list = itemsByOrderId.putIfAbsent(item.orderId, () => []);
-        list.add(
-          OrderItemModel(
-            id: item.id,
-            orderId: item.orderId,
-            dishId: item.dishId,
-            dishNameSnapshot: item.dishNameSnapshot,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subtotal: item.subtotal,
-          ),
-        );
-      }
-
-      return orderRows.map((row) {
-        return OrderModel(
-          id: row.id,
-          orderNumber: row.orderNumber,
-          customerName: row.customerName,
-          locationText: row.locationText,
-          total: row.total,
-          paymentMethod: row.paymentMethod,
-          status: row.status,
-          orderedAt: row.orderedAt,
-          createdBy: row.createdBy,
-          version: row.version,
-          syncStatus: row.syncStatus,
-          items: itemsByOrderId[row.id] ?? const [],
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
+    return _db.customSelect(
+      sql,
+      variables: variables,
+      readsFrom: {_db.ordersTable, _db.orderItemsTable},
+    ).watch().map((rows) {
+      return rows.map((r) {
+        return OrderSummaryModel(
+          id: r.read<String>('id'),
+          orderNumber: r.readNullable<String>('order_number'),
+          customerName: r.read<String>('customer_name'),
+          locationText: r.readNullable<String>('location_text'),
+          total: r.read<double>('total'),
+          paymentMethod: r.read<String>('payment_method'),
+          status: r.read<String>('status'),
+          orderedAt: r.read<DateTime>('ordered_at'),
+          createdBy: r.read<String>('created_by'),
+          version: r.read<int>('version'),
+          syncStatus: r.read<String>('sync_status'),
+          itemsCount: r.read<int>('items_count'),
+          createdAt: r.read<DateTime>('created_at'),
+          updatedAt: r.read<DateTime>('updated_at'),
         );
       }).toList();
     });

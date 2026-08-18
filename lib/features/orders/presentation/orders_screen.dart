@@ -19,54 +19,63 @@ class OrdersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestión de Pedidos', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.deepOrange,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('NUEVO PEDIDO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (ctx) => const NewOrderScreen()),
-          );
-        },
+        title: const Text('Pedidos del Día', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Historial de Pedidos',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (ctx) => const OrderHistoryScreen()),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_circle, color: Colors.deepOrange),
+            tooltip: 'Nuevo Pedido',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (ctx) => const NewOrderScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Resumen de Producción de Cocina (Agrupado por Platos)
+            // 1. Resumen de Producción (Cocina Offline)
             const ProductionSummaryWidget(),
             const SizedBox(height: 20),
 
-            // 2. Cabecera y Lista de Pedidos de Hoy
+            // 2. Lista de Pedidos de Hoy
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Pedidos de Hoy:',
+                  'Pedidos Registrados Hoy',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                TextButton(
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('NUEVO PEDIDO'),
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (ctx) => const OrderHistoryScreen()),
+                      MaterialPageRoute(builder: (ctx) => const NewOrderScreen()),
                     );
                   },
-                  child: const Text('Ver Historial'),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            todayOrdersAsync.when(
-              skipLoadingOnReload: true,
-              skipLoadingOnRefresh: true,
-              data: (orders) {
-                final activeOrders = orders.where((o) => o.status != 'CANCELLED').toList();
+            const SizedBox(height: 10),
 
+            todayOrdersAsync.when(
+              data: (activeOrders) {
                 if (activeOrders.isEmpty) {
                   return const Card(
                     child: Padding(
@@ -95,7 +104,7 @@ class OrdersScreen extends ConsumerWidget {
                         onTap: () {
                           showDialog(
                             context: context,
-                            builder: (ctx) => OrderDetailDialog(order: order),
+                            builder: (ctx) => OrderDetailDialog(orderId: order.id),
                           );
                         },
                         leading: CircleAvatar(
@@ -110,7 +119,7 @@ class OrdersScreen extends ConsumerWidget {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                         subtitle: Text(
-                          '${order.paymentMethod} • Estado: ${order.status}\nItems: ${order.items.length} platos',
+                          '${order.paymentMethod} • Estado: ${order.status}\nItems: ${order.itemsCount} platos',
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: Row(
@@ -124,10 +133,13 @@ class OrdersScreen extends ConsumerWidget {
                               PopupMenuButton<String>(
                                 onSelected: (val) async {
                                   if (val == 'edit') {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (ctx) => NewOrderScreen(orderToEdit: order)),
-                                    );
+                                    final fullOrder = await repository.getOrderById(order.id);
+                                    if (fullOrder != null && context.mounted) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (ctx) => NewOrderScreen(orderToEdit: fullOrder)),
+                                      );
+                                    }
                                   } else if (val == 'delete') {
                                     final confirmed = await ConfirmDialog.show(
                                       context,

@@ -140,16 +140,21 @@ void main() {
     // 6. Guardar pedido
     await tester.enterText(find.byType(TextField).first, 'Mesa 10 Grande');
     await tester.tap(find.text('GUARDAR PEDIDO'));
-    // En lugar de pumpAndSettle que espera indefinidamente por SnackBar, avanzamos el tiempo
     await tester.pump();
     await tester.pump(const Duration(seconds: 4));
 
-    // Verificar en SQLite
+    // Verificar en SQLite (OrderSummaryModel)
     final orders = await ordersRepo.watchTodayOrders().first;
     expect(orders.length, equals(1));
     expect(orders.first.customerName, equals('Mesa 10 Grande'));
-    expect(orders.first.items.length, equals(1));
-    expect(orders.first.items.first.quantity, equals(170));
+    expect(orders.first.itemsCount, equals(1));
     expect(orders.first.total, equals(4250.0));
+
+    // Verificar detalle completo con OrderModel
+    final fullOrder = await ordersRepo.getOrderById(orders.first.id);
+    expect(fullOrder, isNotNull);
+    expect(fullOrder!.items.length, equals(1));
+    expect(fullOrder.items.first.quantity, equals(170));
+    expect(fullOrder.items.first.dishNameSnapshot, equals('Majadito de Pato'));
   });
 }

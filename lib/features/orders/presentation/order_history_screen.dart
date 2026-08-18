@@ -17,30 +17,48 @@ class OrderHistoryScreen extends ConsumerStatefulWidget {
 
 class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
   late TextEditingController _searchController;
+  late ScrollController _scrollController;
   Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: ref.read(orderHistorySearchQueryProvider));
+    _scrollController = ScrollController()..addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      final currentLimit = ref.read(orderHistoryLimitProvider);
+      ref.read(orderHistoryLimitProvider.notifier).state = currentLimit + 50;
+    }
+  }
+
+  void _resetLimit() {
+    ref.read(orderHistoryLimitProvider.notifier).state = 50;
   }
 
   void _onSearchChanged(String value) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _resetLimit();
       ref.read(orderHistorySearchQueryProvider.notifier).state = value;
     });
   }
 
   void _clearFilters() {
     _searchController.clear();
+    _resetLimit();
     ref.read(orderHistorySearchQueryProvider.notifier).state = '';
     ref.read(orderHistoryStatusFilterProvider.notifier).state = null;
     ref.read(orderHistoryDateFilterProvider.notifier).state = null;
@@ -85,6 +103,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
       final fromStr = DateFormat('yyyy-MM-dd').format(picked.start);
       final toStr = DateFormat('yyyy-MM-dd').format(picked.end);
 
+      _resetLimit();
       ref.read(orderHistoryDateFilterProvider.notifier).state = null;
       ref.read(orderHistoryDateFromProvider.notifier).state = fromStr;
       ref.read(orderHistoryDateToProvider.notifier).state = toStr;
@@ -142,6 +161,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
+                          _resetLimit();
                           ref.read(orderHistorySearchQueryProvider.notifier).state = '';
                         },
                       )
@@ -162,6 +182,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     selected: isAllDates,
                     onSelected: (selected) {
                       if (selected) {
+                        _resetLimit();
                         ref.read(orderHistoryDateFilterProvider.notifier).state = null;
                         ref.read(orderHistoryDateFromProvider.notifier).state = null;
                         ref.read(orderHistoryDateToProvider.notifier).state = null;
@@ -174,6 +195,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     selected: isToday,
                     onSelected: (selected) {
                       if (selected) {
+                        _resetLimit();
                         ref.read(orderHistoryDateFilterProvider.notifier).state = todayStr;
                         ref.read(orderHistoryDateFromProvider.notifier).state = null;
                         ref.read(orderHistoryDateToProvider.notifier).state = null;
@@ -186,6 +208,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     selected: isYesterday,
                     onSelected: (selected) {
                       if (selected) {
+                        _resetLimit();
                         ref.read(orderHistoryDateFilterProvider.notifier).state = yesterdayStr;
                         ref.read(orderHistoryDateFromProvider.notifier).state = null;
                         ref.read(orderHistoryDateToProvider.notifier).state = null;
@@ -198,6 +221,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     selected: isThisWeek,
                     onSelected: (selected) {
                       if (selected) {
+                        _resetLimit();
                         ref.read(orderHistoryDateFilterProvider.notifier).state = null;
                         ref.read(orderHistoryDateFromProvider.notifier).state = weekRange.from;
                         ref.read(orderHistoryDateToProvider.notifier).state = weekRange.to;
@@ -210,6 +234,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     selected: isThisMonth,
                     onSelected: (selected) {
                       if (selected) {
+                        _resetLimit();
                         ref.read(orderHistoryDateFilterProvider.notifier).state = null;
                         ref.read(orderHistoryDateFromProvider.notifier).state = monthRange.from;
                         ref.read(orderHistoryDateToProvider.notifier).state = monthRange.to;
@@ -253,6 +278,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                           DropdownMenuItem(value: 'CANCELLED', child: Text('Eliminados / Cancelados', overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (val) {
+                          _resetLimit();
                           ref.read(orderHistoryStatusFilterProvider.notifier).state = val;
                         },
                       ),
@@ -271,7 +297,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 4. Lista de Resultados
+            // 4. Lista de Resultados con Paginación Infinita
             Expanded(
               child: historyAsync.when(
                 skipLoadingOnReload: true,
@@ -287,6 +313,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                     );
                   }
                   return ListView.builder(
+                    controller: _scrollController,
                     itemCount: orders.length,
                     itemBuilder: (context, index) {
                       final order = orders[index];
@@ -304,7 +331,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
                             onTap: () {
                               showDialog(
                                 context: context,
-                                builder: (ctx) => OrderDetailDialog(order: order),
+                                builder: (ctx) => OrderDetailDialog(orderId: order.id),
                               );
                             },
                             leading: CircleAvatar(

@@ -1,15 +1,27 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:katering_grecia_app/core/database/app_database.dart';
+import 'package:katering_grecia_app/core/sync/sync_engine.dart';
+import 'package:katering_grecia_app/core/sync/sync_queue_manager.dart';
+import 'package:katering_grecia_app/features/orders/data/orders_repository.dart';
 import 'package:katering_grecia_app/features/production/data/production_repository.dart';
+
+class MockSyncEngine extends Mock implements SyncEngine {}
 
 void main() {
   late AppDatabase db;
+  late SyncQueueManager queueManager;
+  late MockSyncEngine mockSyncEngine;
+  late OrdersRepository ordersRepo;
   late ProductionRepository productionRepo;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
+    queueManager = SyncQueueManager(db);
+    mockSyncEngine = MockSyncEngine();
+    ordersRepo = OrdersRepository(db: db, queueManager: queueManager, syncEngine: mockSyncEngine);
     productionRepo = ProductionRepository(db: db);
   });
 
@@ -72,16 +84,13 @@ void main() {
         }
       });
 
-      // 3. Medir tiempo de consulta paginada de pedidos de hoy (20 items)
+      // 3. Medir tiempo de consulta de OrdersRepository.watchOrders paginado (50 items) con items_count
       final stopwatchOrders = Stopwatch()..start();
-      final todayOrdersPage = await (db.select(db.ordersTable)
-            ..where((t) => t.status.equals('PENDING'))
-            ..orderBy([(t) => OrderingTerm(expression: t.orderedAt, mode: OrderingMode.desc)])
-            ..limit(20, offset: 0))
-          .get();
+      final page = await ordersRepo.watchOrders(limit: 50, offset: 0).first;
       stopwatchOrders.stop();
 
-      expect(todayOrdersPage.length, equals(20));
+      expect(page.length, equals(50));
+      expect(page.first.itemsCount, equals(2));
       expect(stopwatchOrders.elapsedMilliseconds, lessThanOrEqualTo(100));
 
       // 4. Medir tiempo de agregación SQL de Producción sobre los 10,000 items
