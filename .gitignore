@@ -43,6 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 
 # Shorebird Code Push (OTA Updates)
 # IMPORTANTE: shorebird.yaml DEBE ser rastreado en Git para mantener el App ID único de Shorebird
